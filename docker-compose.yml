@@ -1,0 +1,68 @@
+# ============================================================
+# docker-compose.yml — PRODUZIONE (VPS + Traefik)
+# Uso: docker compose up -d
+# Richiede: .env nella stessa directory
+# ============================================================
+
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: campusly-db-prod
+    restart: always
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - campusly_prod_pgdata:/var/lib/postgresql/data
+    networks:
+      - campusly-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Nessuna porta esposta: accessibile solo dalla rete interna
+
+  # ── Backend Spring Boot ──────────────────────────────────────
+  backend:
+    image: ${DOCKER_IMAGE:-ghcr.io/campusly/campusly-backend}:${IMAGE_TAG:-latest}
+    container_name: campusly-backend-prod
+    restart: always
+    env_file: .env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - campusly-internal
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.campusly-api.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.campusly-api.entrypoints=websecure"
+      - "traefik.http.routers.campusly-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.campusly-api.loadbalancer.server.port=8080"
+      - "traefik.docker.network=traefik"
+    # Nessuna porta esposta: Traefik gestisce il routing
+
+volumes:
+  campusly_prod_pgdata:
+    name: campusly_prod_pgdata
+
+networks:
+  campusly-internal:
+    driver: bridge
+    name: campusly-internal
+  traefik:
+    external: true
+    name: traefik
+
