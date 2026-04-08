@@ -10,59 +10,57 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Servizio per la generazione e la validazione dei token JWT.
- * Utilizza la libreria jjwt (io.jsonwebtoken) per firmare e verificare i token.
- */
 @Slf4j
 @Service
 public class JwtService {
 
     private final SecretKey signingKey;
     private final long accessTokenExpirationMs;
-    private final long refreshTokenExpirationMs;
+    private final boolean secure;
 
     public JwtService(
             @Value("${app.security.jwt.secret}") String secret,
-            @Value("${app.security.jwt.access-token-expiration-ms}") long accessTokenExpirationMs,
-            @Value("${app.security.jwt.refresh-token-expiration-ms}") long refreshTokenExpirationMs) {
+            @Value("${app.security.jwt.access-token-expiration-ms}") long accessTokenExpirationMs) {
         this.signingKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
         this.accessTokenExpirationMs = accessTokenExpirationMs;
-        this.refreshTokenExpirationMs = refreshTokenExpirationMs;
+        this.secure = "true".equals(System.getenv("SECURE"));
     }
 
-    /**
-     * Genera un access token JWT con le claim standard.
-     *
-     * @param userId   ID dell'utente (UUID)
-     * @param email    email dell'utente
-     * @param role     ruolo dell'utente (es. STUDENT)
-     * @return il token JWT firmato
-     */
-    public String generateAccessToken(UUID userId, String email, String role) {
+    public String generateToken(UUID userId, String email, String role) {
         return buildToken(userId, email, Map.of("role", role), accessTokenExpirationMs);
     }
 
-    /**
-     * Genera un refresh token JWT (claim minimali).
-     *
-     * @param userId ID dell'utente (UUID)
-     * @param email  email dell'utente
-     * @return il refresh token JWT firmato
-     */
-    public String generateRefreshToken(UUID userId, String email) {
-        return buildToken(userId, email, Map.of("type", "refresh"), refreshTokenExpirationMs);
+    public int getTokenMaxAgeSeconds() {
+        return (int) (accessTokenExpirationMs / 1000);
     }
 
-    /**
-     * Estrae tutte le claim dal token JWT.
-     * Lancia {@link JwtException} se il token è invalido o scaduto.
-     */
+    public boolean isSecure() {
+        return secure;
+    }
+
+    public String getSameSiteAttribute() {
+        return secure ? "None" : "Lax";
+    }
+
+    public String getTokenFromCookie(HttpServletRequest request) {
+        if (request.getCookies() == null) {
+            return null;
+        }
+        for (Cookie cookie : request.getCookies()) {
+            if ("token".equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
+    }
+
     public Claims extractClaims(String token) {
         return Jwts.parser()
                 .verifyWith(signingKey)
@@ -71,30 +69,18 @@ public class JwtService {
                 .getPayload();
     }
 
-    /**
-     * Estrae il subject (email) dal token.
-     */
     public String extractEmail(String token) {
         return extractClaims(token).getSubject();
     }
 
-    /**
-     * Estrae l'userId dalla claim "userId".
-     */
     public UUID extractUserId(String token) {
         return UUID.fromString(extractClaims(token).get("userId", String.class));
     }
 
-    /**
-     * Estrae il ruolo dalla claim "role".
-     */
     public String extractRole(String token) {
         return extractClaims(token).get("role", String.class);
     }
 
-    /**
-     * Verifica se il token è valido (firma corretta e non scaduto).
-     */
     public boolean isTokenValid(String token) {
         try {
             extractClaims(token);
@@ -103,6 +89,14 @@ public class JwtService {
             log.debug("Token JWT non valido: {}", e.getMessage());
             return false;
         }
+    }
+
+    public UUID getUserIdFromRequest(HttpServletRequest request) {
+        String token = getTokenFromCookie(request);
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        return extractUserId(token);
     }
 
     // ==================== Private ====================

@@ -17,21 +17,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
-/**
- * Filtro che intercetta ogni richiesta HTTP per verificare la presenza
- * e la validità di un JWT nell'header {@code Authorization: Bearer <token>}.
- * <p>
- * Se il token è valido, popola il {@link SecurityContextHolder} con
- * l'autenticazione dell'utente (email, userId, ruolo), rendendo la richiesta
- * "autenticata" per Spring Security in modo completamente stateless.
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-
-    private static final String AUTHORIZATION_HEADER = "Authorization";
-    private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtService jwtService;
     private final TokenBlacklistService tokenBlacklistService;
@@ -41,24 +30,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
 
-        String authHeader = request.getHeader(AUTHORIZATION_HEADER);
+        String token = jwtService.getTokenFromCookie(request);
 
-        // Se non c'è header Authorization o non inizia con "Bearer ", continua senza autenticazione
-        if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+        if (token == null || token.isBlank()) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        String token = authHeader.substring(BEARER_PREFIX.length());
-
-        // Verifica che il token non sia stato invalidato (logout)
         if (tokenBlacklistService.isBlacklisted(token)) {
             log.debug("Token nella blacklist, accesso negato");
             filterChain.doFilter(request, response);
             return;
         }
 
-        // Valida il token e imposta l'autenticazione nel SecurityContext
         if (jwtService.isTokenValid(token) && SecurityContextHolder.getContext().getAuthentication() == null) {
             String email = jwtService.extractEmail(token);
             String role = jwtService.extractRole(token);

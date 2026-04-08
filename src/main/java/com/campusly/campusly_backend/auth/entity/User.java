@@ -27,11 +27,11 @@ public class User {
     @Column(nullable = false, unique = true, length = 50)
     private String username;
 
-    @Column(nullable = false, length = 100)
-    private String nome;
+    @Column(name = "nome", nullable = false, length = 100)
+    private String name;
 
-    @Column(nullable = false, length = 100)
-    private String cognome;
+    @Column(name = "cognome", nullable = false, length = 100)
+    private String surname;
 
     @Column(nullable = false, unique = true)
     private String email;
@@ -40,10 +40,10 @@ public class User {
     private String passwordHash;
 
     @Column(name = "data_nascita")
-    private LocalDate dataNascita;
+    private LocalDate dateOfBirth;
 
-    @Column(length = 20)
-    private String telefono;
+    @Column(name = "telefono", length = 20)
+    private String telephone;
 
     @Column(name = "university_id")
     private UUID universityId;

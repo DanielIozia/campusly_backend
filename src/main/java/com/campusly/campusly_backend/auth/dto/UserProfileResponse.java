@@ -10,15 +10,14 @@ import java.util.UUID;
 public record UserProfileResponse(
         UUID id,
         String username,
-        String nome,
-        String cognome,
+        String name,
+        String surname,
         String email,
-        java.time.LocalDate dataNascita,
-        String telefono,
+        java.time.LocalDate dateOfBirth,
+        String telephone,
         String photoUrl,
         String bio,
         String role,
         String authProvider,
-        Instant createdAt
-) {
+        Instant createdAt) {
 }

@@ -4,12 +4,14 @@ import com.campusly.campusly_backend.auth.dto.*;
 import com.campusly.campusly_backend.auth.entity.AuthProvider;
 import com.campusly.campusly_backend.auth.entity.User;
 import com.campusly.campusly_backend.auth.repository.UserRepository;
-import com.campusly.campusly_backend.shared.exception.BadRequestException;
-import com.campusly.campusly_backend.shared.exception.ResourceNotFoundException;
+import com.campusly.campusly_backend.shared.exception.ExceptionBackend;
 import com.campusly.campusly_backend.shared.security.JwtService;
 import com.campusly.campusly_backend.shared.security.TokenBlacklistService;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,51 +33,69 @@ public class AuthService {
      * Registra un nuovo utente con autenticazione locale (email/password).
      */
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
+    public UserAuthResponse register(RegisterRequest request, HttpServletResponse response) {
+        final String errorTitle = "Errore registrazione utente";
+
         if (userRepository.existsByEmail(request.email())) {
-            throw new BadRequestException("Email già registrata");
+            throw ExceptionBackend.fromError(
+                    errorTitle, "Email già registrata, CODICE: AU100", request,
+                    HttpStatus.CONFLICT
+            );
         }
 
-        LocalDate dataNascita = toLocalDate(request.dataNascita());
-        String username = generateUsername(request.nome(), request.cognome());
+        LocalDate dateOfBirth = toLocalDate(request.dateOfBirth());
+        String username = generateUsername(request.name(), request.surname());
 
         User user = User.builder()
                 .username(username)
-                .nome(request.nome().trim())
-                .cognome(request.cognome().trim())
+                .name(request.name().trim())
+                .surname(request.surname().trim())
                 .email(request.email().trim().toLowerCase())
                 .passwordHash(passwordEncoder.encode(request.password()))
-                .dataNascita(dataNascita)
-                .telefono(request.telefono())
+                .dateOfBirth(dateOfBirth)
+                .telephone(request.telephone())
                 .authProvider(AuthProvider.LOCAL)
                 .build();
 
         user = userRepository.save(user);
-        log.info("Nuovo utente registrato: {} {} ({})", user.getNome(), user.getCognome(), user.getEmail());
+        log.info("Nuovo utente registrato: {} {} ({})", user.getName(), user.getSurname(), user.getEmail());
 
-        return generateTokens(user);
+        addTokenCookie(user, response);
+        return new UserAuthResponse(user.getId(), user.getName(), user.getEmail());
     }
 
     /**
      * Autentica un utente con email e password.
      */
     @Transactional(readOnly = true)
-    public AuthResponse login(LoginRequest request) {
+    public UserAuthResponse login(LoginRequest request, HttpServletResponse response) {
+        final String errorTitle = "Errore login";
+
         User user = userRepository.findByEmail(request.email())
-                .orElseThrow(() -> new BadRequestException("Credenziali non valide"));
+                .orElseThrow(() -> ExceptionBackend.fromError(
+                        errorTitle, "Credenziali non valide, CODICE: AU200", request,
+                        HttpStatus.UNAUTHORIZED
+                ));
 
         if (user.getAuthProvider() != AuthProvider.LOCAL) {
-            throw new BadRequestException(
+            throw ExceptionBackend.fromError(
+                    errorTitle,
                     "Questo account utilizza il login con " + user.getAuthProvider()
-                            + ". Usa il provider corretto per accedere.");
+                            + ". Usa il provider corretto per accedere, CODICE: AU201",
+                    request, HttpStatus.BAD_REQUEST
+            );
         }
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new BadRequestException("Credenziali non valide");
+            throw ExceptionBackend.fromError(
+                    errorTitle, "Credenziali non valide, CODICE: AU202", request,
+                    HttpStatus.UNAUTHORIZED
+            );
         }
 
         log.info("Login riuscito per utente: {}", user.getEmail());
-        return generateTokens(user);
+        addTokenCookie(user, response);
+        return new UserAuthResponse(user.getId(), user.getName(), user.getEmail());
     }
 
     /**
@@ -83,18 +103,23 @@ public class AuthService {
      * estratta dal JWT (impostata nel SecurityContext dal filtro).
      */
     @Transactional(readOnly = true)
-    public UserProfileResponse getAuthenticatedUser(String email) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("Utente", "email", email));
+    public UserProfileResponse getAuthenticatedUser(UUID authenticatedUserId) {
+        final String errorTitle = "Errore recupero profilo";
+
+        User user = userRepository.findById(authenticatedUserId)
+                .orElseThrow(() -> ExceptionBackend.fromError(
+                        errorTitle, "Utente non trovato, CODICE: AU300", authenticatedUserId,
+                        HttpStatus.UNAUTHORIZED
+                ));
 
         return new UserProfileResponse(
                 user.getId(),
                 user.getUsername(),
-                user.getNome(),
-                user.getCognome(),
+                user.getName(),
+                user.getSurname(),
                 user.getEmail(),
-                user.getDataNascita(),
-                user.getTelefono(),
+                user.getDateOfBirth(),
+                user.getTelephone(),
                 user.getPhotoUrl(),
                 user.getBio(),
                 user.getRole().name(),
@@ -113,12 +138,17 @@ public class AuthService {
 
     // ==================== Private ====================
 
-    private AuthResponse generateTokens(User user) {
-        String accessToken = jwtService.generateAccessToken(
+    private void addTokenCookie(User user, HttpServletResponse response) {
+        String token = jwtService.generateToken(
                 user.getId(), user.getEmail(), user.getRole().name());
-        String refreshToken = jwtService.generateRefreshToken(
-                user.getId(), user.getEmail());
-        return new AuthResponse(accessToken, refreshToken);
+
+        Cookie cookie = new Cookie("token", token);
+        cookie.setHttpOnly(true);
+        cookie.setPath("/");
+        cookie.setMaxAge(jwtService.getTokenMaxAgeSeconds());
+        cookie.setSecure(jwtService.isSecure());
+        cookie.setAttribute("SameSite", jwtService.getSameSiteAttribute());
+        response.addCookie(cookie);
     }
 
     /**
@@ -126,9 +156,13 @@ public class AuthService {
      */
     private LocalDate toLocalDate(RegisterRequest.DateOfBirth dob) {
         try {
-            return LocalDate.of(dob.anno(), dob.mese(), dob.giorno());
+            return LocalDate.of(dob.year(), dob.month(), dob.day());
         } catch (Exception e) {
-            throw new BadRequestException("Data di nascita non valida: " + dob.giorno() + "/" + dob.mese() + "/" + dob.anno());
+            throw ExceptionBackend.fromError(
+                    "Errore registrazione utente",
+                    "Data di nascita non valida: " + dob.day() + "/" + dob.month() + "/" + dob.year() + ", CODICE: AU101",
+                    null, HttpStatus.BAD_REQUEST
+            );
         }
     }
 
@@ -136,8 +170,8 @@ public class AuthService {
      * Genera un username univoco a partire da nome e cognome.
      * Formato: nome.cognome (lowercase, senza spazi). Se esiste già, aggiunge un suffisso random.
      */
-    private String generateUsername(String nome, String cognome) {
-        String base = (nome.trim() + "." + cognome.trim())
+    private String generateUsername(String name, String surname) {
+        String base = (name.trim() + "." + surname.trim())
                 .toLowerCase()
                 .replaceAll("\\s+", "");
 
