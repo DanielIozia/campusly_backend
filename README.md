@@ -106,6 +106,43 @@ Il backend usa un **singolo token JWT** salvato in un **cookie HttpOnly**:
 
 Per i dettagli tecnici sulla configurazione Spring Security e CORS, vedi [SECURITY.md](SECURITY.md).
 
+## Configurazione database locale
+
+Ogni membro del team ha un proprio database locale separato su Neon.
+
+### Step 1 — Crea un account su Neon
+Vai su [neon.tech](https://neon.tech) e registrati.
+
+### Step 2 — Crea un progetto
+1. Crea un nuovo progetto e chiamalo `campusly-local`
+2. Scegli la region `eu-central-1` (Frankfurt)
+3. Dalla dashboard vai su **Connection string**, seleziona il formato **JDBC** e copia la stringa
+
+### Step 3 — Crea il file `.env.local`
+Nella root del progetto crea il file `.env.local` (non viene committato) con le credenziali appena ottenute da Neon:
+
+```env
+SPRING_DATASOURCE_URL=jdbc:postgresql://<host>.neon.tech/<dbname>?sslmode=require
+SPRING_DATASOURCE_USERNAME=<user>
+SPRING_DATASOURCE_PASSWORD=<password>
+
+APP_PORT=8080
+JWT_SECRET=<genera con: openssl rand -hex 64>
+GOOGLE_CLIENT_ID=<chiedi al team>
+GOOGLE_CLIENT_SECRET=<chiedi al team>
+OAUTH2_FRONTEND_REDIRECT=http://localhost:4200/oauth2/callback
+```
+
+> `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` sono condivisi dal team — chiedili a chi gestisce il progetto.
+
+### Step 4 — Avvia il backend
+```powershell
+git checkout local
+.\start.ps1 local
+```
+
+Liquibase creerà automaticamente tutte le tabelle al primo avvio.
+
 ## Migrazioni Database
 
 Le migrazioni sono gestite da **Liquibase** e si trovano in:

@@ -1,7 +1,9 @@
-package com.campusly.campusly_backend.auth.controller;
+package com.campusly.campusly_backend.actors.user.controllers;
 
-import com.campusly.campusly_backend.auth.dto.*;
-import com.campusly.campusly_backend.auth.service.AuthService;
+import com.campusly.campusly_backend.actors.user.interfaces.auth.LoginRequest;
+import com.campusly.campusly_backend.actors.user.interfaces.auth.LoginResponse;
+import com.campusly.campusly_backend.actors.user.interfaces.registration.RegistrationRequest;
+import com.campusly.campusly_backend.actors.user.services.AuthService;
 import com.campusly.campusly_backend.shared.exception.CustomResponse;
 import com.campusly.campusly_backend.shared.exception.ExceptionUtilService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,7 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
@@ -23,30 +25,14 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(HttpServletRequest request,
             HttpServletResponse response,
-            @Valid @RequestBody RegisterUserRequest registerRequest) {
+            @Valid @RequestBody RegistrationRequest registerRequest) {
         CustomResponse customResponse = new CustomResponse(request.getMethod());
         try {
-            UserAuthResponse data = authService.registerUser(registerRequest, response);
+            LoginResponse data = authService.registerUser(registerRequest, response);
             customResponse.setData(data);
-
             return ResponseEntity.status(HttpStatus.CREATED).body(customResponse);
         } catch (Exception e) {
-            return exceptionUtilService.handleAnyException(
-                    e, request, null, null, customResponse.getMethod());
-        }
-    }
-
-    @PostMapping("/register/creator")
-    public ResponseEntity<?> registerCreator(HttpServletRequest request,
-            HttpServletResponse response,
-            @Valid @RequestBody RegisterCreatorRequest registerRequest) {
-        CustomResponse customResponse = new CustomResponse(request.getMethod());
-        try {
-            UserAuthResponse data = authService.registerCreator(registerRequest, response);
-            customResponse.setData(data);
-
-            return ResponseEntity.status(HttpStatus.CREATED).body(customResponse);
-        } catch (Exception e) {
+            e.printStackTrace();
             return exceptionUtilService.handleAnyException(
                     e, request, null, null, customResponse.getMethod());
         }
@@ -58,11 +44,11 @@ public class AuthController {
             @Valid @RequestBody LoginRequest loginRequest) {
         CustomResponse customResponse = new CustomResponse(request.getMethod());
         try {
-            UserAuthResponse data = authService.login(loginRequest, response);
+            LoginResponse data = authService.login(loginRequest, response);
             customResponse.setData(data);
-
             return ResponseEntity.ok(customResponse);
         } catch (Exception e) {
+            e.printStackTrace();
             return exceptionUtilService.handleAnyException(
                     e, request, null, null, customResponse.getMethod());
         }
@@ -72,9 +58,8 @@ public class AuthController {
     public ResponseEntity<?> me(HttpServletRequest request) {
         CustomResponse customResponse = new CustomResponse(request.getMethod());
         try {
-            UserProfileResponse data = authService.getMe();
-            customResponse.setData(data);
-
+            authService.getMe();
+            customResponse.setData(null);
             return ResponseEntity.ok(customResponse);
         } catch (Exception e) {
             return exceptionUtilService.handleAnyException(
@@ -87,7 +72,6 @@ public class AuthController {
         CustomResponse customResponse = new CustomResponse(request.getMethod());
         try {
             authService.logout(request, response);
-
             return ResponseEntity.ok(customResponse);
         } catch (Exception e) {
             return exceptionUtilService.handleAnyException(

@@ -1,23 +1,30 @@
-package com.campusly.campusly_backend.auth.service;
+package com.campusly.campusly_backend.actors.user.services;
 
-import com.campusly.campusly_backend.auth.dto.*;
+import com.campusly.campusly_backend.shared.exception.ExceptionBackend;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import com.campusly.campusly_backend.shared.security.JwtService;
+import com.campusly.campusly_backend.shared.security.TokenBlacklistService;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.stereotype.Service;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
+import lombok.RequiredArgsConstructor;
+import jakarta.servlet.http.Cookie;
+import lombok.extern.slf4j.Slf4j;
+
+//INTERFACES
+import com.campusly.campusly_backend.actors.user.interfaces.auth.LoginRequest;
+import com.campusly.campusly_backend.actors.user.interfaces.auth.LoginResponse;
+import com.campusly.campusly_backend.actors.user.interfaces.registration.RegistrationRequest;
+//ENTITY
 import com.campusly.campusly_backend.auth.entity.AuthProvider;
 import com.campusly.campusly_backend.auth.entity.Role;
 import com.campusly.campusly_backend.auth.entity.User;
+
+//REPOSITORY
 import com.campusly.campusly_backend.auth.repository.UserRepository;
-import com.campusly.campusly_backend.shared.exception.ExceptionBackend;
-import com.campusly.campusly_backend.shared.security.JwtService;
-import com.campusly.campusly_backend.shared.security.TokenBlacklistService;
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.Period;
@@ -27,7 +34,7 @@ import java.time.Period;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private static final int ETA_MINIMA = 16;
+    private static final int MIN_AGE = 16;
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -39,92 +46,73 @@ public class AuthService {
     // ---------------------------------------------------------------
 
     @Transactional
-    public UserAuthResponse registerUser(RegisterUserRequest request, HttpServletResponse response) {
-        log.info("Registrazione CAMPUSLY_USER: {}", request.email());
-        LocalDate birthDate = request.birthDate().toLocalDate();
-        validaRegistrazione(request.email(), request.username(), birthDate);
+    public LoginResponse registerUser(RegistrationRequest request, HttpServletResponse response) {
+        String errorTitle = "Errore registrazione";
+        request.getBirthDate().isValid();
+        request.isValid(errorTitle);
+
+        LocalDate birthDate = request.getBirthDate().toLocalDate();
+        validaRegistrazione(request.getEmail(), request.getUsername(), birthDate);
 
         User user = buildUser(
-                request.firstName(), request.lastName(), request.username(),
-                request.email(), request.password(), birthDate,
-                request.phone(), Role.CAMPUSLY_USER);
+                request.getFirstName(), request.getLastName(), request.getUsername(),
+                request.getEmail(), request.getPassword(), birthDate,
+                request.getPhone(), Role.CAMPUSLY_USER);
 
         userRepository.save(user);
         addTokenCookie(user, response);
-        log.info("CAMPUSLY_USER registrato con successo: {}", user.getEmail());
-        return toAuthResponse(user);
+        return LoginResponse.fromUser(user);
     }
 
     // ---------------------------------------------------------------
-    // Registrazione creator (CAMPUSLY_CREATOR)
-    // ---------------------------------------------------------------
-
-    @Transactional
-    public UserAuthResponse registerCreator(RegisterCreatorRequest request, HttpServletResponse response) {
-        log.info("Registrazione CAMPUSLY_CREATOR: {}", request.email());
-        LocalDate birthDate = request.birthDate().toLocalDate();
-        validaRegistrazione(request.email(), request.username(), birthDate);
-
-        User user = buildUser(
-                request.firstName(), request.lastName(), request.username(),
-                request.email(), request.password(), birthDate,
-                request.phone(), Role.CAMPUSLY_CREATOR);
-
-        userRepository.save(user);
-        addTokenCookie(user, response);
-        log.info("CAMPUSLY_CREATOR registrato con successo: {}", user.getEmail());
-        return toAuthResponse(user);
-    }
-
-    // ---------------------------------------------------------------
-    // Login (comune a tutti i ruoli)
+    // Login CAMPUSLY_USER
     // ---------------------------------------------------------------
 
     @Transactional(readOnly = true)
-    public UserAuthResponse login(LoginRequest request, HttpServletResponse response) {
-        log.info("Tentativo di login: {}", request.email());
+    public LoginResponse login(LoginRequest request, HttpServletResponse response) {
+        String errorTitle = "Errore login";
+        request.isValid(errorTitle);
 
-        User user = userRepository.findByEmail(request.email())
+        User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> ExceptionBackend.fromError(
-                        "Credenziali non valide",
-                        "Nessun account trovato con questa email. CODICE: AU200",
+                        errorTitle,
+                        "Nessun account trovato. CODICE: AU201",
                         null, HttpStatus.UNAUTHORIZED));
 
         if (user.getAuthProvider() != AuthProvider.LOCAL) {
             throw ExceptionBackend.fromError(
-                    "Provider non corretto",
+                    errorTitle,
                     "Questo account è stato creato con " + user.getAuthProvider().name().toLowerCase()
-                            + ". CODICE: AU201",
+                            + ". CODICE: AU202",
                     null, HttpStatus.UNAUTHORIZED);
         }
 
-        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw ExceptionBackend.fromError(
-                    "Credenziali non valide",
-                    "Password errata. CODICE: AU202",
+                    errorTitle,
+                    "Password errata. CODICE: AU203",
                     null, HttpStatus.UNAUTHORIZED);
         }
 
         addTokenCookie(user, response);
-        log.info("Login effettuato: {} [{}]", user.getEmail(), user.getRole());
-        return toAuthResponse(user);
+        return LoginResponse.fromUser(user);
     }
 
     // ---------------------------------------------------------------
-    // Profilo utente autenticato
+    // Profilo utente autenticato (me)
     // ---------------------------------------------------------------
 
     @Transactional(readOnly = true)
-    public UserProfileResponse getMe() {
+    public void getMe() {
+        String erroriTitle = "Errore recupero profilo";
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> ExceptionBackend.fromError(
-                        "Utente non trovato",
-                        "Impossibile trovare l'utente autenticato. CODICE: AU300",
-                        null, HttpStatus.NOT_FOUND));
-
-        return toProfileResponse(user);
+        if (!userRepository.existsByEmail(email)) {
+            throw ExceptionBackend.fromError(
+                    erroriTitle,
+                    "Impossibile trovare l'utente autenticato. CODICE: AU300",
+                    null, HttpStatus.NOT_FOUND);
+        }
     }
 
     // ---------------------------------------------------------------
@@ -151,6 +139,7 @@ public class AuthService {
     // ==================== Private ====================
 
     private void validaRegistrazione(String email, String username, LocalDate birthDate) {
+
         if (userRepository.existsByEmail(email)) {
             throw ExceptionBackend.fromError(
                     "Email già registrata",
@@ -166,10 +155,10 @@ public class AuthService {
         }
 
         int eta = Period.between(birthDate, LocalDate.now()).getYears();
-        if (eta < ETA_MINIMA) {
+        if (eta < MIN_AGE) {
             throw ExceptionBackend.fromError(
                     "Età non consentita",
-                    "Devi avere almeno " + ETA_MINIMA + " anni per registrarti. CODICE: AU101",
+                    "Devi avere almeno " + MIN_AGE + " anni per registrarti. CODICE: AU101",
                     null, HttpStatus.BAD_REQUEST);
         }
     }
@@ -201,22 +190,5 @@ public class AuthService {
         cookie.setSecure(jwtService.isSecure());
         cookie.setAttribute("SameSite", jwtService.getSameSiteAttribute());
         response.addCookie(cookie);
-    }
-
-    private UserAuthResponse toAuthResponse(User user) {
-        return new UserAuthResponse(
-                user.getId(), user.getUsername(),
-                user.getFirstName(), user.getLastName(),
-                user.getEmail(), user.getRole());
-    }
-
-    private UserProfileResponse toProfileResponse(User user) {
-        return new UserProfileResponse(
-                user.getId(), user.getUsername(),
-                user.getFirstName(), user.getLastName(),
-                user.getEmail(), user.getBirthDate(),
-                user.getPhone(), user.getPhotoUrl(),
-                user.getBio(), user.getRole(),
-                user.getAuthProvider(), user.getCreatedAt());
     }
 }

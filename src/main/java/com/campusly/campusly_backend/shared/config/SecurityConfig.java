@@ -45,7 +45,7 @@ public class SecurityConfig {
 
             // Regole di autorizzazione
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/register/creator").permitAll()
+                .requestMatchers("/auth/login", "/auth/register", "/auth/register/creator").permitAll()
                 .requestMatchers("/api-docs/**", "/scalar/**").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
