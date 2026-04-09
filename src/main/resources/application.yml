@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: campusly-backend
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  liquibase:
+    change-log: classpath:db/changelog/db-changelog-master.xml
+
+  # OAuth2 Client — impostare client-id e client-secret nei profili (local, prod)
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope: openid, profile, email
+
+springdoc:
+    api-docs:
+      path: /api-docs
+
+scalar:
+  enabled: true
+  path: /scalar
+  page-title: Campusly API
+      
+
+# Configurazione JWT applicativa
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+      access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION:900000}        # 15 minuti
+    oauth2:
+      frontend-redirect-url: ${OAUTH2_FRONTEND_REDIRECT}

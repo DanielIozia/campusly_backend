@@ -36,64 +36,38 @@ src/main/java/com/campusly/campusly_backend/
 ## Prerequisiti
 
 - **Docker Desktop** installato e avviato
-- File **`.env.local`** nella root del progetto (vedi sezione sotto)
+- File **`.env.local`** nella root del progetto (con le variabili necessarie per il database e l'applicazione)
 
-## Variabili d'ambiente
 
-Crea un file `.env.local` nella root del progetto:
 
-```env
-# Database
-POSTGRES_DB=campusly_db
-POSTGRES_USER=campusly_user
-POSTGRES_PASSWORD=campusly_pass
-POSTGRES_PORT=5432
 
-# App
-APP_PORT=8080
-SECURE=false
+## Avvio con database locale
 
-# JWT
-JWT_SECRET=<chiave base64 di almeno 256 bit>
-JWT_ACCESS_EXPIRATION=900000
+Per avviare il progetto utilizzando il database locale, esegui:
 
-# OAuth2 Google (opzionale in dev)
-GOOGLE_CLIENT_ID=placeholder
-GOOGLE_CLIENT_SECRET=placeholder
-OAUTH2_FRONTEND_REDIRECT=http://localhost:4200/oauth2/callback
-```
-
-## Avvio con Docker
-
-**Avviare (build + start):**
-```bash
+```sh
 docker compose -f docker-compose-local.yml --env-file .env.local up --build
 ```
 
-**Fermare (mantiene i dati nel DB):**
-```bash
-docker compose -f docker-compose-local.yml --env-file .env.local down
+Per spegnere i container:
+
+```sh
+docker compose -f docker-compose-local.yml down
 ```
 
-**Fermare e cancellare i dati del DB:**
-```bash
-docker compose -f docker-compose-local.yml --env-file .env.local down -v
+## Avvio con database di sviluppo 
+Per avviare il progetto utilizzando il database di sviluppo (dev), esegui:
+
+```sh
+docker compose -f docker-compose-dev.yml --env-file .env.dev up --build
 ```
 
-> Il flag `-v` rimuove i volumi Docker, quindi **cancella tutti i dati del database**. Usalo solo quando vuoi resettare il DB.
+Per spegnere i container:
 
-## Avvio senza Docker (sviluppo locale)
+```sh
+docker compose -f docker-compose-dev.yml down
+``` 
 
-Richiede un'istanza PostgreSQL in esecuzione su `localhost:5432`.
-
-```bash
-./mvnw spring-boot:run -Dspring-boot.run.profiles=local
-```
-
-Oppure su Windows:
-```powershell
-.\mvnw.cmd spring-boot:run -D"spring-boot.run.profiles=local"
-```
 
 ## API Endpoints
 

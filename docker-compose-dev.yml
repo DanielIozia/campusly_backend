@@ -1,7 +1,7 @@
 # ============================================================
-# docker-compose-local.yml — SVILUPPO LOCALE
-# Uso: docker compose -f docker-compose-local.yml up --build
-# Richiede: .env.local nella stessa directory
+# docker-compose-dev.yml — AMBIENTE DEV (DB remoto condiviso)
+# Uso: docker compose -f docker-compose-dev.yml up --build
+# Richiede: .env.dev nella stessa directory
 # ============================================================
 
 services:
@@ -9,12 +9,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: campusly-backend:local
-    container_name: campusly-backend-local
+    image: campusly-backend:dev
+    container_name: campusly-backend-dev
     restart: unless-stopped
-    env_file: .env.local
+    env_file: .env.dev
     environment:
-      SPRING_PROFILES_ACTIVE: local
+      SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
@@ -25,9 +25,9 @@ services:
     ports:
       - "${APP_PORT:-8080}:8080"
     networks:
-      - campusly-local
+      - campusly-dev
 
 networks:
-  campusly-local:
+  campusly-dev:
     driver: bridge
-    name: campusly-local
+    name: campusly-dev
