@@ -4,8 +4,6 @@ import com.campusly.campusly_backend.auth.dto.*;
 import com.campusly.campusly_backend.auth.service.AuthService;
 import com.campusly.campusly_backend.shared.exception.CustomResponse;
 import com.campusly.campusly_backend.shared.exception.ExceptionUtilService;
-import com.campusly.campusly_backend.shared.security.JwtService;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -22,23 +20,37 @@ import java.util.UUID;
 public class AuthController {
 
     private final AuthService authService;
-    private final JwtService jwtService;
     private final ExceptionUtilService exceptionUtilService;
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(HttpServletRequest request,
+    public ResponseEntity<?> registerUser(HttpServletRequest request,
             HttpServletResponse response,
-            @Valid @RequestBody RegisterRequest registerRequest) {
-        UUID authenticatedUserId = null;
+            @Valid @RequestBody RegisterUserRequest registerRequest) {
         CustomResponse customResponse = new CustomResponse(request.getMethod());
         try {
-            UserAuthResponse data = authService.register(registerRequest, response);
+            UserAuthResponse data = authService.registerUser(registerRequest, response);
             customResponse.setData(data);
 
             return ResponseEntity.status(HttpStatus.CREATED).body(customResponse);
         } catch (Exception e) {
             return exceptionUtilService.handleAnyException(
-                    e, request, authenticatedUserId, null, customResponse.getMethod());
+                    e, request, null, null, customResponse.getMethod());
+        }
+    }
+
+    @PostMapping("/register/creator")
+    public ResponseEntity<?> registerCreator(HttpServletRequest request,
+            HttpServletResponse response,
+            @Valid @RequestBody RegisterCreatorRequest registerRequest) {
+        CustomResponse customResponse = new CustomResponse(request.getMethod());
+        try {
+            UserAuthResponse data = authService.registerCreator(registerRequest, response);
+            customResponse.setData(data);
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(customResponse);
+        } catch (Exception e) {
+            return exceptionUtilService.handleAnyException(
+                    e, request, null, null, customResponse.getMethod());
         }
     }
 
@@ -46,7 +58,6 @@ public class AuthController {
     public ResponseEntity<?> login(HttpServletRequest request,
             HttpServletResponse response,
             @Valid @RequestBody LoginRequest loginRequest) {
-        UUID authenticatedUserId = null;
         CustomResponse customResponse = new CustomResponse(request.getMethod());
         try {
             UserAuthResponse data = authService.login(loginRequest, response);
@@ -55,51 +66,34 @@ public class AuthController {
             return ResponseEntity.ok(customResponse);
         } catch (Exception e) {
             return exceptionUtilService.handleAnyException(
-                    e, request, authenticatedUserId, null, customResponse.getMethod());
+                    e, request, null, null, customResponse.getMethod());
         }
     }
 
     @GetMapping("/me")
     public ResponseEntity<?> me(HttpServletRequest request) {
-        UUID authenticatedUserId = null;
         CustomResponse customResponse = new CustomResponse(request.getMethod());
         try {
-            authenticatedUserId = jwtService.getUserIdFromRequest(request);
-
-            UserProfileResponse data = authService.getAuthenticatedUser(authenticatedUserId);
+            UserProfileResponse data = authService.getMe();
             customResponse.setData(data);
 
             return ResponseEntity.ok(customResponse);
         } catch (Exception e) {
             return exceptionUtilService.handleAnyException(
-                    e, request, authenticatedUserId, null, customResponse.getMethod());
+                    e, request, null, null, customResponse.getMethod());
         }
     }
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpServletRequest request, HttpServletResponse response) {
-        UUID authenticatedUserId = null;
         CustomResponse customResponse = new CustomResponse(request.getMethod());
         try {
-            authenticatedUserId = jwtService.getUserIdFromRequest(request);
-
-            String token = jwtService.getTokenFromCookie(request);
-            if (token != null) {
-                authService.logout(token);
-            }
-
-            Cookie cookie = new Cookie("token", "");
-            cookie.setHttpOnly(true);
-            cookie.setPath("/");
-            cookie.setMaxAge(0);
-            cookie.setSecure(jwtService.isSecure());
-            cookie.setAttribute("SameSite", jwtService.getSameSiteAttribute());
-            response.addCookie(cookie);
+            authService.logout(request, response);
 
             return ResponseEntity.ok(customResponse);
         } catch (Exception e) {
             return exceptionUtilService.handleAnyException(
-                    e, request, authenticatedUserId, null, customResponse.getMethod());
+                    e, request, null, null, customResponse.getMethod());
         }
     }
 }

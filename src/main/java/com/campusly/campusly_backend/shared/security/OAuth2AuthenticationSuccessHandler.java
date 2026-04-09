@@ -34,8 +34,11 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
         String email = oAuth2User.getAttribute("email");
         String name = oAuth2User.getAttribute("name");
 
+        if (email == null) {
+            throw new IllegalArgumentException("Email non presente nell'OAuth2User");
+        }
         UUID userId = UUID.nameUUIDFromBytes(email.getBytes());
-        String role = "STUDENT";
+        String role = "CAMPUSLY_USER";
 
         String token = jwtService.generateToken(userId, email, role);
 

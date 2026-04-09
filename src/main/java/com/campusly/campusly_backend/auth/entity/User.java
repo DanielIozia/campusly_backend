@@ -4,12 +4,12 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
-import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Entity JPA mappata sulla tabella {@code users}.
+ * Entità principale degli utenti Campusly.
  */
 @Entity
 @Table(name = "users")
@@ -24,26 +24,26 @@ public class User {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, unique = true, length = 50)
+    @Column(name = "username", unique = true, nullable = false, length = 50)
     private String username;
 
-    @Column(name = "nome", nullable = false, length = 100)
-    private String name;
+    @Column(name = "first_name", nullable = false, length = 100)
+    private String firstName;
 
-    @Column(name = "cognome", nullable = false, length = 100)
-    private String surname;
+    @Column(name = "last_name", nullable = false, length = 100)
+    private String lastName;
 
-    @Column(nullable = false, unique = true)
+    @Column(name = "email", unique = true, nullable = false, length = 255)
     private String email;
 
-    @Column(name = "password_hash")
+    @Column(name = "password_hash", length = 255)
     private String passwordHash;
 
-    @Column(name = "data_nascita")
-    private LocalDate dateOfBirth;
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
 
-    @Column(name = "telefono", length = 20)
-    private String telephone;
+    @Column(name = "phone", length = 25)
+    private String phone;
 
     @Column(name = "university_id")
     private UUID universityId;
@@ -51,27 +51,27 @@ public class User {
     @Column(name = "erasmus_univ_id")
     private UUID erasmusUnivId;
 
-    @Column(name = "is_erasmus")
     @Builder.Default
+    @Column(name = "is_erasmus")
     private Boolean isErasmus = false;
 
     @Column(name = "photo_url")
     private String photoUrl;
 
-    @Column(length = 300)
+    @Column(name = "bio", length = 300)
     private String bio;
 
+    @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(name = "auth_provider", length = 20)
-    @Builder.Default
     private AuthProvider authProvider = AuthProvider.LOCAL;
 
-    @Enumerated(EnumType.STRING)
-    @Column(length = 20)
     @Builder.Default
-    private Role role = Role.STUDENT;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", length = 20)
+    private Role role = Role.CAMPUSLY_USER;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
-    private Instant createdAt;
+    private LocalDateTime createdAt;
 }

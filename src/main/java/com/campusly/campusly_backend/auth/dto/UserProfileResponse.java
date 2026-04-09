@@ -1,23 +1,26 @@
 package com.campusly.campusly_backend.auth.dto;
 
-import java.time.Instant;
+import com.campusly.campusly_backend.auth.entity.AuthProvider;
+import com.campusly.campusly_backend.auth.entity.Role;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Risposta restituita dall'endpoint {@code GET /api/auth/me}.
- * Contiene le informazioni profilo dell'utente autenticato.
+ * DTO di risposta per il profilo utente autenticato (GET /api/auth/me).
  */
 public record UserProfileResponse(
         UUID id,
         String username,
-        String name,
-        String surname,
+        String firstName,
+        String lastName,
         String email,
-        java.time.LocalDate dateOfBirth,
-        String telephone,
+        LocalDate birthDate,
+        String phone,
         String photoUrl,
         String bio,
-        String role,
-        String authProvider,
-        Instant createdAt) {
-}
+        Role role,
+        AuthProvider authProvider,
+        LocalDateTime createdAt
+) {}

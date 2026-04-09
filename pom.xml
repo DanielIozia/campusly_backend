@@ -76,7 +76,7 @@
 			<artifactId>lombok</artifactId>
 			<optional>true</optional>
 		</dependency>
-		
+
 		<!-- test -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -118,10 +118,10 @@
 			<version>0.13.0</version>
 		</dependency>
 
-		<!-- OpenAPI / Swagger UI -->
+		<!-- Scalar UI -->
 		<dependency>
 			<groupId>org.springdoc</groupId>
-			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<artifactId>springdoc-openapi-starter-webmvc-scalar</artifactId>
 			<version>3.0.2</version>
 		</dependency>
 

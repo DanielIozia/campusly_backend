@@ -7,6 +7,7 @@
 
     <include file="db/changelog/migrations/001-init.sql"/>
     <include file="db/changelog/migrations/002-add-user-profile-fields.sql"/>
+    <include file="db/changelog/migrations/003-rename-columns-english-and-update-roles.sql"/>
 
     <!-- aggiungere qui le altre migrazioni -->
 

@@ -2,141 +2,193 @@ package com.campusly.campusly_backend.auth.service;
 
 import com.campusly.campusly_backend.auth.dto.*;
 import com.campusly.campusly_backend.auth.entity.AuthProvider;
+import com.campusly.campusly_backend.auth.entity.Role;
 import com.campusly.campusly_backend.auth.entity.User;
 import com.campusly.campusly_backend.auth.repository.UserRepository;
 import com.campusly.campusly_backend.shared.exception.ExceptionBackend;
 import com.campusly.campusly_backend.shared.security.JwtService;
 import com.campusly.campusly_backend.shared.security.TokenBlacklistService;
 import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.UUID;
+import java.time.Period;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
+    private static final int ETA_MINIMA = 16;
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final TokenBlacklistService tokenBlacklistService;
 
-    /**
-     * Registra un nuovo utente con autenticazione locale (email/password).
-     */
+    // ---------------------------------------------------------------
+    // Registrazione utente standard (CAMPUSLY_USER)
+    // ---------------------------------------------------------------
+
     @Transactional
-    public UserAuthResponse register(RegisterRequest request, HttpServletResponse response) {
-        final String errorTitle = "Errore registrazione utente";
+    public UserAuthResponse registerUser(RegisterUserRequest request, HttpServletResponse response) {
+        log.info("Registrazione CAMPUSLY_USER: {}", request.email());
+        LocalDate birthDate = request.birthDate().toLocalDate();
+        validaRegistrazione(request.email(), request.username(), birthDate);
 
-        if (userRepository.existsByEmail(request.email())) {
-            throw ExceptionBackend.fromError(
-                    errorTitle, "Email già registrata, CODICE: AU100", request,
-                    HttpStatus.CONFLICT
-            );
-        }
+        User user = buildUser(
+                request.firstName(), request.lastName(), request.username(),
+                request.email(), request.password(), birthDate,
+                request.phone(), Role.CAMPUSLY_USER);
 
-        LocalDate dateOfBirth = toLocalDate(request.dateOfBirth());
-        String username = generateUsername(request.name(), request.surname());
-
-        User user = User.builder()
-                .username(username)
-                .name(request.name().trim())
-                .surname(request.surname().trim())
-                .email(request.email().trim().toLowerCase())
-                .passwordHash(passwordEncoder.encode(request.password()))
-                .dateOfBirth(dateOfBirth)
-                .telephone(request.telephone())
-                .authProvider(AuthProvider.LOCAL)
-                .build();
-
-        user = userRepository.save(user);
-        log.info("Nuovo utente registrato: {} {} ({})", user.getName(), user.getSurname(), user.getEmail());
-
+        userRepository.save(user);
         addTokenCookie(user, response);
-        return new UserAuthResponse(user.getId(), user.getName(), user.getEmail());
+        log.info("CAMPUSLY_USER registrato con successo: {}", user.getEmail());
+        return toAuthResponse(user);
     }
 
-    /**
-     * Autentica un utente con email e password.
-     */
+    // ---------------------------------------------------------------
+    // Registrazione creator (CAMPUSLY_CREATOR)
+    // ---------------------------------------------------------------
+
+    @Transactional
+    public UserAuthResponse registerCreator(RegisterCreatorRequest request, HttpServletResponse response) {
+        log.info("Registrazione CAMPUSLY_CREATOR: {}", request.email());
+        LocalDate birthDate = request.birthDate().toLocalDate();
+        validaRegistrazione(request.email(), request.username(), birthDate);
+
+        User user = buildUser(
+                request.firstName(), request.lastName(), request.username(),
+                request.email(), request.password(), birthDate,
+                request.phone(), Role.CAMPUSLY_CREATOR);
+
+        userRepository.save(user);
+        addTokenCookie(user, response);
+        log.info("CAMPUSLY_CREATOR registrato con successo: {}", user.getEmail());
+        return toAuthResponse(user);
+    }
+
+    // ---------------------------------------------------------------
+    // Login (comune a tutti i ruoli)
+    // ---------------------------------------------------------------
+
     @Transactional(readOnly = true)
     public UserAuthResponse login(LoginRequest request, HttpServletResponse response) {
-        final String errorTitle = "Errore login";
+        log.info("Tentativo di login: {}", request.email());
 
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> ExceptionBackend.fromError(
-                        errorTitle, "Credenziali non valide, CODICE: AU200", request,
-                        HttpStatus.UNAUTHORIZED
-                ));
+                        "Credenziali non valide",
+                        "Nessun account trovato con questa email. CODICE: AU200",
+                        null, HttpStatus.UNAUTHORIZED));
 
         if (user.getAuthProvider() != AuthProvider.LOCAL) {
             throw ExceptionBackend.fromError(
-                    errorTitle,
-                    "Questo account utilizza il login con " + user.getAuthProvider()
-                            + ". Usa il provider corretto per accedere, CODICE: AU201",
-                    request, HttpStatus.BAD_REQUEST
-            );
+                    "Provider non corretto",
+                    "Questo account è stato creato con " + user.getAuthProvider().name().toLowerCase()
+                            + ". CODICE: AU201",
+                    null, HttpStatus.UNAUTHORIZED);
         }
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw ExceptionBackend.fromError(
-                    errorTitle, "Credenziali non valide, CODICE: AU202", request,
-                    HttpStatus.UNAUTHORIZED
-            );
+                    "Credenziali non valide",
+                    "Password errata. CODICE: AU202",
+                    null, HttpStatus.UNAUTHORIZED);
         }
 
-        log.info("Login riuscito per utente: {}", user.getEmail());
         addTokenCookie(user, response);
-        return new UserAuthResponse(user.getId(), user.getName(), user.getEmail());
+        log.info("Login effettuato: {} [{}]", user.getEmail(), user.getRole());
+        return toAuthResponse(user);
     }
 
-    /**
-     * Restituisce il profilo dell'utente autenticato a partire dall'email
-     * estratta dal JWT (impostata nel SecurityContext dal filtro).
-     */
+    // ---------------------------------------------------------------
+    // Profilo utente autenticato
+    // ---------------------------------------------------------------
+
     @Transactional(readOnly = true)
-    public UserProfileResponse getAuthenticatedUser(UUID authenticatedUserId) {
-        final String errorTitle = "Errore recupero profilo";
+    public UserProfileResponse getMe() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        User user = userRepository.findById(authenticatedUserId)
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> ExceptionBackend.fromError(
-                        errorTitle, "Utente non trovato, CODICE: AU300", authenticatedUserId,
-                        HttpStatus.UNAUTHORIZED
-                ));
+                        "Utente non trovato",
+                        "Impossibile trovare l'utente autenticato. CODICE: AU300",
+                        null, HttpStatus.NOT_FOUND));
 
-        return new UserProfileResponse(
-                user.getId(),
-                user.getUsername(),
-                user.getName(),
-                user.getSurname(),
-                user.getEmail(),
-                user.getDateOfBirth(),
-                user.getTelephone(),
-                user.getPhotoUrl(),
-                user.getBio(),
-                user.getRole().name(),
-                user.getAuthProvider().name(),
-                user.getCreatedAt()
-        );
+        return toProfileResponse(user);
     }
 
-    /**
-     * Invalida l'access token corrente aggiungendolo alla blacklist.
-     */
-    public void logout(String accessToken) {
-        tokenBlacklistService.blacklist(accessToken);
+    // ---------------------------------------------------------------
+    // Logout
+    // ---------------------------------------------------------------
+
+    public void logout(HttpServletRequest request, HttpServletResponse response) {
+        String token = jwtService.getTokenFromCookie(request);
+        if (token != null) {
+            tokenBlacklistService.blacklist(token);
+        }
+
+        Cookie cookie = new Cookie("token", "");
+        cookie.setHttpOnly(true);
+        cookie.setMaxAge(0);
+        cookie.setPath("/");
+        cookie.setSecure(jwtService.isSecure());
+        cookie.setAttribute("SameSite", jwtService.getSameSiteAttribute());
+        response.addCookie(cookie);
+
         log.info("Logout eseguito, token invalidato");
     }
 
     // ==================== Private ====================
+
+    private void validaRegistrazione(String email, String username, LocalDate birthDate) {
+        if (userRepository.existsByEmail(email)) {
+            throw ExceptionBackend.fromError(
+                    "Email già registrata",
+                    "Esiste già un account con questa email. CODICE: AU100",
+                    null, HttpStatus.CONFLICT);
+        }
+
+        if (userRepository.existsByUsername(username)) {
+            throw ExceptionBackend.fromError(
+                    "Username non disponibile",
+                    "Questo username è già in uso. CODICE: AU102",
+                    null, HttpStatus.CONFLICT);
+        }
+
+        int eta = Period.between(birthDate, LocalDate.now()).getYears();
+        if (eta < ETA_MINIMA) {
+            throw ExceptionBackend.fromError(
+                    "Età non consentita",
+                    "Devi avere almeno " + ETA_MINIMA + " anni per registrarti. CODICE: AU101",
+                    null, HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private User buildUser(String firstName, String lastName, String username,
+            String email, String password, LocalDate birthDate,
+            String phone, Role role) {
+        return User.builder()
+                .firstName(firstName)
+                .lastName(lastName)
+                .username(username)
+                .email(email)
+                .passwordHash(passwordEncoder.encode(password))
+                .birthDate(birthDate)
+                .phone(phone)
+                .authProvider(AuthProvider.LOCAL)
+                .role(role)
+                .build();
+    }
 
     private void addTokenCookie(User user, HttpServletResponse response) {
         String token = jwtService.generateToken(
@@ -151,45 +203,20 @@ public class AuthService {
         response.addCookie(cookie);
     }
 
-    /**
-     * Converte il DTO DateOfBirth in LocalDate, validando la data.
-     */
-    private LocalDate toLocalDate(RegisterRequest.DateOfBirth dob) {
-        try {
-            return LocalDate.of(dob.year(), dob.month(), dob.day());
-        } catch (Exception e) {
-            throw ExceptionBackend.fromError(
-                    "Errore registrazione utente",
-                    "Data di nascita non valida: " + dob.day() + "/" + dob.month() + "/" + dob.year() + ", CODICE: AU101",
-                    null, HttpStatus.BAD_REQUEST
-            );
-        }
+    private UserAuthResponse toAuthResponse(User user) {
+        return new UserAuthResponse(
+                user.getId(), user.getUsername(),
+                user.getFirstName(), user.getLastName(),
+                user.getEmail(), user.getRole());
     }
 
-    /**
-     * Genera un username univoco a partire da nome e cognome.
-     * Formato: nome.cognome (lowercase, senza spazi). Se esiste già, aggiunge un suffisso random.
-     */
-    private String generateUsername(String name, String surname) {
-        String base = (name.trim() + "." + surname.trim())
-                .toLowerCase()
-                .replaceAll("\\s+", "");
-
-        if (base.length() > 45) {
-            base = base.substring(0, 45);
-        }
-
-        if (!userRepository.existsByUsername(base)) {
-            return base;
-        }
-
-        // Aggiunge suffisso numerico random
-        String candidate;
-        do {
-            String suffix = UUID.randomUUID().toString().substring(0, 4);
-            candidate = base.length() > 44 ? base.substring(0, 44) + "." + suffix : base + "." + suffix;
-        } while (userRepository.existsByUsername(candidate));
-
-        return candidate;
+    private UserProfileResponse toProfileResponse(User user) {
+        return new UserProfileResponse(
+                user.getId(), user.getUsername(),
+                user.getFirstName(), user.getLastName(),
+                user.getEmail(), user.getBirthDate(),
+                user.getPhone(), user.getPhotoUrl(),
+                user.getBio(), user.getRole(),
+                user.getAuthProvider(), user.getCreatedAt());
     }
 }
