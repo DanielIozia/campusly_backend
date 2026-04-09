@@ -39,35 +39,36 @@ src/main/java/com/campusly/campusly_backend/
 - File **`.env.local`** nella root del progetto (con le variabili necessarie per il database e l'applicazione)
 
 
+## Ambienti e avvio
 
+Il progetto supporta 3 ambienti separati, ognuno con il proprio branch Git e database Neon dedicato.
 
-## Avvio con database locale
+| Ambiente | Branch | Database |
+|----------|--------|----------|
+| Local    | `local` | Neon branch `local` |
+| Dev      | `dev`   | Neon branch `dev`   |
+| Prod     | `prod`  | Neon branch `production`  |
 
-Per avviare il progetto utilizzando il database locale, esegui:
+> Prima di avviare, assicurati di essere nel branch corretto e di avere il file `.env` relativo all'ambiente nella root del progetto. Puoi usare `.env.example` come riferimento.
+
+### Avvio
 
 ```sh
-docker compose -f docker-compose-local.yml --env-file .env.local up --build
+# Local
+git checkout local
+./start.ps1 local        # linux/mac: .\start.sh local
+
+# Dev
+git checkout dev
+./start.ps1 dev          # linux/mac: .\start.sh dev
 ```
 
-Per spegnere i container:
+### Stop
 
 ```sh
-docker compose -f docker-compose-local.yml down
+./stop.ps1 local         # linux/mac: .\stop.sh local
+./stop.ps1 dev            # linux/mac: .\stop.sh dev
 ```
-
-## Avvio con database di sviluppo 
-Per avviare il progetto utilizzando il database di sviluppo (dev), esegui:
-
-```sh
-docker compose -f docker-compose-dev.yml --env-file .env.dev up --build
-```
-
-Per spegnere i container:
-
-```sh
-docker compose -f docker-compose-dev.yml down
-``` 
-
 
 ## API Endpoints
 
