@@ -12,11 +12,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Servizio per la blacklist dei token JWT invalidati (logout).
- * <p>
+ * 
  * Mantiene in memoria i token revocati fino alla loro scadenza naturale,
  * dopodiché vengono rimossi automaticamente da un job schedulato.
- * <p>
- * <strong>Nota:</strong> In un setup di produzione con più istanze,
+ * 
+ * Nota: In un setup di produzione con più istanze,
  * sostituire con Redis o un altro store distribuito.
  */
 @Slf4j

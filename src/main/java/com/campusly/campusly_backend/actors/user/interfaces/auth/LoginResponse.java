@@ -2,7 +2,7 @@ package com.campusly.campusly_backend.actors.user.interfaces.auth;
 
 import java.util.UUID;
 
-import com.campusly.campusly_backend.auth.entity.User;
+import com.campusly.campusly_backend.database.entity.User;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
