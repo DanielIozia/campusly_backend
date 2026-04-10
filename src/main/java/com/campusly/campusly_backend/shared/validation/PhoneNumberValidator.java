@@ -5,9 +5,9 @@ import jakarta.validation.ConstraintValidatorContext;
 
 import java.util.regex.Pattern;
 
-/**
- * Implementazione del validator per @ValidPhoneNumber.
- * Formato atteso: +{1-4 cifre}-{6-15 cifre}  →  es. +39-3471234567
+/*
+    * Implementazione del validator per @ValidPhoneNumber.
+    * Formato atteso: +{1-4 cifre}-{6-15 cifre}  →  es. +39-3471234567
  */
 public class PhoneNumberValidator implements ConstraintValidator<ValidPhoneNumber, String> {
 

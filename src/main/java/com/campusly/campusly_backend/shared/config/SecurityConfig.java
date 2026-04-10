@@ -33,33 +33,46 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .csrf(csrf -> csrf.disable())
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-            // Gestione errori di autenticazione/autorizzazione con payload JSON standardizzato
-            .exceptionHandling(exceptions -> exceptions
-                .authenticationEntryPoint(authenticationEntryPoint)
-                .accessDeniedHandler(accessDeniedHandler)
-            )
+                // Gestione errori di autenticazione/autorizzazione con payload JSON
+                // standardizzato
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
 
-            // Regole di autorizzazione
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/register/creator").permitAll()
-                .requestMatchers("/api-docs/**", "/scalar/**").permitAll()
-                .requestMatchers("/actuator/**").permitAll()
-                .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
-                
-                .anyRequest().authenticated()
-            )
+                // Regole di autorizzazione
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                "/auth/login",
+                                "/register/send-otp",
+                                "/register/verify-otp",
+                                "/register/resend-otp",
+                                "/register/complete"
+                                )
+                        .permitAll()
+                        .requestMatchers(
+                                "/api-docs/**",
+                                "/scalar/**")
+                        .permitAll()
+                        .requestMatchers(
+                                "/actuator/**")
+                        .permitAll()
+                        .requestMatchers(
+                                "/oauth2/**",
+                                "/login/oauth2/**")
+                        .permitAll()
 
-            // OAuth2 Login (Google)
-            .oauth2Login(oauth2 -> oauth2
-                .successHandler(oAuth2SuccessHandler)
-            )
+                        .anyRequest().authenticated())
 
-            // Filtro JWT prima del filtro standard di autenticazione
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                // OAuth2 Login (Google)
+                .oauth2Login(oauth2 -> oauth2
+                        .successHandler(oAuth2SuccessHandler))
+
+                // Filtro JWT prima del filtro standard di autenticazione
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

@@ -1,7 +1,8 @@
-package com.campusly.campusly_backend.auth.repository;
+package com.campusly.campusly_backend.database.repository;
 
-import com.campusly.campusly_backend.auth.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.campusly.campusly_backend.database.entity.User;
 
 import java.util.Optional;
 import java.util.UUID;

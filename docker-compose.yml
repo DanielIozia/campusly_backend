@@ -1,47 +1,29 @@
 # ============================================================
 # docker-compose.yml — PRODUZIONE (VPS + Traefik)
 # Uso: docker compose up -d
-# Richiede: .env nella stessa directory
+# Richiede: .env.prod nella stessa directory
 # ============================================================
 
 services:
-
-  # ── PostgreSQL ───────────────────────────────────────────────
-  postgres:
-    image: postgres:16-alpine
-    container_name: campusly-db-prod
-    restart: always
-    env_file: .env
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - campusly_prod_pgdata:/var/lib/postgresql/data
-    networks:
-      - campusly-internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    # Nessuna porta esposta: accessibile solo dalla rete interna
 
   # ── Backend Spring Boot ──────────────────────────────────────
   backend:
     image: ${DOCKER_IMAGE:-ghcr.io/campusly/campusly-backend}:${IMAGE_TAG:-latest}
     container_name: campusly-backend-prod
     restart: always
-    env_file: .env
+    env_file: .env.prod
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
-    depends_on:
-      postgres:
-        condition: service_healthy
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      OAUTH2_FRONTEND_REDIRECT: ${OAUTH2_FRONTEND_REDIRECT}
+      DOMAIN: ${DOMAIN}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
     networks:
       - campusly-internal
       - traefik
@@ -52,11 +34,6 @@ services:
       - "traefik.http.routers.campusly-api.tls.certresolver=letsencrypt"
       - "traefik.http.services.campusly-api.loadbalancer.server.port=8080"
       - "traefik.docker.network=traefik"
-    # Nessuna porta esposta: Traefik gestisce il routing
-
-volumes:
-  campusly_prod_pgdata:
-    name: campusly_prod_pgdata
 
 networks:
   campusly-internal:
@@ -65,4 +42,3 @@ networks:
   traefik:
     external: true
     name: traefik
-

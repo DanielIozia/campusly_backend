@@ -5,15 +5,13 @@ import jakarta.validation.Payload;
 
 import java.lang.annotation.*;
 
-/**
- * Valida il numero di telefono nel formato internazionale con trattino:
- * +{prefisso}-{numero}  →  es. +39-3471234567
- *
- * - Prefisso: 1-4 cifre dopo il +
- * - Separatore: trattino (-)
- * - Numero: 6-15 cifre
- *
- * Valori null o blank sono considerati validi (usa @NotBlank se il campo è obbligatorio).
+/*
+    * Valida il numero di telefono nel formato internazionale con trattino:
+    * +{prefisso}-{numero}  →  es. +39-3471234567
+    
+    * - Prefisso: 1-4 cifre dopo il +
+    * - Separatore: trattino (-)
+    * - Numero: 6-15 cifre
  */
 @Documented
 @Constraint(validatedBy = PhoneNumberValidator.class)
