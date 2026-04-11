@@ -35,7 +35,8 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 // Gestione errori di autenticazione/autorizzazione con payload JSON
                 // standardizzato
@@ -47,11 +48,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/auth/login",
+                                "/auth/forgot-password",
+                                "/auth/verify-password-otp",
+                                "/auth/reset-password",
                                 "/register/send-otp",
                                 "/register/verify-otp",
                                 "/register/resend-otp",
-                                "/register/complete"
-                                )
+                                "/register/complete")
                         .permitAll()
                         .requestMatchers(
                                 "/api-docs/**",

@@ -28,9 +28,9 @@ public class RegistrationController {
     private final RegistrationService registrationService;
     private final ExceptionUtilService exceptionUtilService;
 
-    // ──────────────────────────────────────────────────────
-    // Registrazione — flusso a 3 step
-    // ──────────────────────────────────────────────────────
+    // ==================================================================
+    // Registrazione — flusso a 3 step (email + OTP + completamento dati)
+    // ==================================================================
 
     // * Step 1: l'utente invia l'email e riceve il codice OTP.
     @PostMapping("/send-otp")

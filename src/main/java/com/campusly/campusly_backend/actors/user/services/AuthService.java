@@ -17,10 +17,18 @@ import lombok.extern.slf4j.Slf4j;
 
 import com.campusly.campusly_backend.actors.user.interfaces.auth.LoginRequest;
 import com.campusly.campusly_backend.actors.user.interfaces.auth.LoginResponse;
+import com.campusly.campusly_backend.actors.user.interfaces.auth.ForgotPasswordRequest;
+import com.campusly.campusly_backend.actors.user.interfaces.auth.VerifyOtpRequest;
+import com.campusly.campusly_backend.actors.user.interfaces.auth.ResetPasswordRequest;
 import com.campusly.campusly_backend.actors.user.interfaces.registration.enums.UserStatus;
 import com.campusly.campusly_backend.auth.entity.AuthProvider;
 import com.campusly.campusly_backend.database.entity.User;
 import com.campusly.campusly_backend.database.repository.UserRepository;
+
+import com.campusly.campusly_backend.shared.email.EmailService;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.security.SecureRandom;
 
 
 @Slf4j
@@ -32,6 +40,12 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final TokenBlacklistService tokenBlacklistService;
+
+    private final EmailService emailService;
+
+    private static final int PASSWORD_MIN_LENGTH = 8;
+    private static final int OTP_EXPIRY_MINUTES = 10;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     // ---------------------------------------------------------------
     // Login
@@ -77,16 +91,11 @@ public class AuthService {
     // ---------------------------------------------------------------
 
     @Transactional(readOnly = true)
-    public void getMe() {
+    public LoginResponse getMe() {
         String errorTitle = "Errore recupero profilo";
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-
-        if (!userRepository.existsByEmail(email)) {
-            throw ExceptionBackend.fromError(
-                    errorTitle,
-                    "Impossibile trovare l'utente autenticato. CODICE: AU300",
-                    null, HttpStatus.NOT_FOUND);
-        }
+        User user = findUserOrThrow(email, errorTitle);
+        return LoginResponse.fromUser(user);
     }
 
     // ---------------------------------------------------------------
@@ -110,9 +119,137 @@ public class AuthService {
         log.info("Logout eseguito, token invalidato");
     }
 
+
+    // ---------------------------------------------------------------
+    // forgot password → invio OTP via email
+    // ---------------------------------------------------------------
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+        String email = normalizeEmail(request.getEmail());
+        String errorTitle = "Recupero password";
+        User user = findUserOrThrow(email, errorTitle);
+
+        if (user.getAuthProvider() != AuthProvider.LOCAL) {
+            throw ExceptionBackend.fromError(
+                    errorTitle,
+                    "Questo account è stato creato con " + user.getAuthProvider().name().toLowerCase() + ". CODICE: AU202",
+                    null, HttpStatus.UNAUTHORIZED);
+        }
+
+        // Se già in recovery, reinvia OTP
+        if (user.getStatus() == UserStatus.OTP_PASSWORD_RECOVERY) {
+            // rigenera OTP e aggiorna scadenza
+            String otp = generateOtp();
+            user.setOtpCode(otp);
+            user.setOtpExpiresAt(LocalDateTime.now().plusMinutes(OTP_EXPIRY_MINUTES));
+            userRepository.save(user);
+            sendOtpEmail(email, otp);
+            return;
+        }
+
+        // Solo utenti attivi possono richiedere recovery
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw ExceptionBackend.fromError(
+                    errorTitle,
+                    "Non è possibile recuperare la password in questo stato. CODICE: AU210",
+                    null, HttpStatus.BAD_REQUEST);
+        }
+
+        // imposta stato recovery, genera OTP
+        String otp = generateOtp();
+        user.setStatus(UserStatus.OTP_PASSWORD_RECOVERY);
+        user.setOtpCode(otp);
+        user.setOtpExpiresAt(LocalDateTime.now().plusMinutes(OTP_EXPIRY_MINUTES));
+        userRepository.save(user);
+        sendOtpEmail(email, otp);
+    }
+
+    @Transactional
+    public void verifyPasswordRecoveryOtp(VerifyOtpRequest request) {
+        String email = normalizeEmail(request.getEmail());
+        String errorTitle = "Verifica OTP recupero password";
+        User user = findUserOrThrow(email, errorTitle);
+
+        if (user.getStatus() != UserStatus.OTP_PASSWORD_RECOVERY) {
+            throw ExceptionBackend.fromError(
+                    errorTitle,
+                    "Nessun codice OTP in attesa di verifica per questa email. CODICE: AU213",
+                    null, HttpStatus.BAD_REQUEST);
+        }
+        if (user.getOtpExpiresAt() == null || LocalDateTime.now().isAfter(user.getOtpExpiresAt())) {
+            throw ExceptionBackend.fromError(
+                    errorTitle,
+                    "Il codice OTP è scaduto. Richiedi un nuovo codice. CODICE: AU214",
+                    null, HttpStatus.GONE);
+        }
+        if (!user.getOtpCode().equals(request.getOtpCode().trim())) {
+            throw ExceptionBackend.fromError(
+                    errorTitle,
+                    "Codice OTP non valido. CODICE: AU215",
+                    null, HttpStatus.BAD_REQUEST);
+        }
+
+        user.setOtpCode(null);
+        user.setOtpExpiresAt(null);
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public LoginResponse resetPassword(ResetPasswordRequest request) {
+        String email = normalizeEmail(request.getEmail());
+        String errorTitle = "Reset password";
+        User user = findUserOrThrow(email, errorTitle);
+
+        if (user.getStatus() != UserStatus.OTP_PASSWORD_RECOVERY) {
+            throw ExceptionBackend.fromError(
+                    errorTitle,
+                    "Non è possibile reimpostare la password in questo stato. CODICE: AU220",
+                    null, HttpStatus.BAD_REQUEST);
+        }
+        // Per sicurezza, richiedi OTP anche qui
+        if (user.getOtpCode() != null || user.getOtpExpiresAt() != null) {
+            throw ExceptionBackend.fromError(
+                    errorTitle,
+                    "Devi prima verificare il codice OTP. CODICE: AU221",
+                    null, HttpStatus.BAD_REQUEST);
+        }
+        // Valida password (puoi aggiungere regole più stringenti)
+        if (request.getNewPassword() == null || request.getNewPassword().length() < PASSWORD_MIN_LENGTH) {
+            throw ExceptionBackend.fromError(
+                    errorTitle,
+                    "La password deve contenere almeno " + PASSWORD_MIN_LENGTH + " caratteri. CODICE: AU222",
+                    null, HttpStatus.BAD_REQUEST);
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setStatus(UserStatus.ACTIVE);
+        userRepository.save(user);
+        return LoginResponse.fromUser(user);
+    }
+
     // ======================================== 
     //            Metodi privati
     // ========================================
+
+    // --- Utility OTP ---
+    private String generateOtp() {
+        return String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
+    }
+
+    private void sendOtpEmail(String recipientEmail, String otpCode) {
+        String title = "Codice recupero password";
+        String body = """
+                <p>Hai richiesto di reimpostare la password del tuo account Campusly.</p>
+                <p>Usa il codice qui sotto per completare la procedura:</p>
+                <div style=\"margin: 28px 0; text-align: center; font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #6C63FF;\">%s</div>
+                <p style=\"color: #6B7280; font-size: 13px;\">Il codice è valido per <strong>%d minuti</strong>.</p>
+                """.formatted(otpCode, OTP_EXPIRY_MINUTES);
+        emailService.sendHtmlEmail(
+                recipientEmail,
+                "Codice recupero password Campusly",
+                List.of(),
+                title,
+                body);
+    }
 
     // Recupera l'utente per email o lancia un'eccezione NOT_FOUND uniforme.
     private User findUserOrThrow(String email, String errorTitle) {

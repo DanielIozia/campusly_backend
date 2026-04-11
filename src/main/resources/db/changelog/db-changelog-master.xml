@@ -5,11 +5,11 @@
     xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
     http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
 
+    <!-- MIGRAZIONI IN ORDINE ALFABETICO -->
     <include file="db/changelog/migrations/001-init.sql"/>
     <include file="db/changelog/migrations/002-add-user-profile-fields.sql"/>
     <include file="db/changelog/migrations/003-rename-columns-english-and-update-roles.sql"/>
     <include file="db/changelog/migrations/004-registration-flow-refactor.sql"/>
-
-    <!-- aggiungere qui le altre migrazioni -->
+    <include file="db/changelog/migrations/005-status-length-50.sql"/>
 
 </databaseChangeLog>
