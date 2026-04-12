@@ -42,7 +42,7 @@ public class RegistrationService {
     private final EmailService emailService;
 
     private static final int MIN_AGE = 16;
-    private static final int OTP_EXPIRY_MINUTES = 10; // scadenza otp in minuti
+    private static final int OTP_EXPIRY_MINUTES = 5; // scadenza otp in minuti
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     // ---------------------------------------------------------------
