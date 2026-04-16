@@ -1,5 +1,6 @@
 package com.campusly.campusly_backend.shared.config;
 
+import com.campusly.campusly_backend.shared.security.AppRoles;
 import com.campusly.campusly_backend.shared.security.JwtAccessDeniedHandler;
 import com.campusly.campusly_backend.shared.security.JwtAuthenticationEntryPoint;
 import com.campusly.campusly_backend.shared.security.JwtAuthenticationFilter;
@@ -7,6 +8,7 @@ import com.campusly.campusly_backend.shared.security.OAuth2AuthenticationSuccess
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -20,6 +22,20 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * Configurazione della sicurezza HTTP.
+ *
+ * Le regole sono organizzate per livello di accesso crescente:
+ *   1. PUBLIC       — nessuna autenticazione richiesta
+ *   2. USER         — qualsiasi utente autenticato (CAMPUSLY_USER e superiori)
+ *   3. CREATOR      — creatori di contenuti (CAMPUSLY_CREATOR e superiori)
+ *   4. MODERATOR    — moderatori (CAMPUSLY_MODERATOR e superiori)
+ *   5. ADMIN        — solo SUPER_ADMIN
+ *
+ * SUPER_ADMIN eredita i permessi di tutti i ruoli grazie a RoleHierarchyConfig.
+ * I gruppi AppRoles.*_AND_ABOVE rendono esplicita questa ereditarietà anche
+ * per versioni di Spring Security precedenti alla 6.3.
+ */
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -37,15 +53,13 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-                // Gestione errori di autenticazione/autorizzazione con payload JSON
-                // standardizzato
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
 
-                // Regole di autorizzazione
                 .authorizeHttpRequests(auth -> auth
+
+                        // ── 1. PUBLIC ────────────────────────────────────────
                         .requestMatchers(
                                 "/auth/login",
                                 "/auth/forgot-password",
@@ -54,27 +68,46 @@ public class SecurityConfig {
                                 "/register/send-otp",
                                 "/register/verify-otp",
                                 "/register/resend-otp",
-                                "/register/complete")
-                        .permitAll()
-                        .requestMatchers(
-                                "/api-docs/**",
-                                "/scalar/**")
-                        .permitAll()
-                        .requestMatchers(
-                                "/actuator/**")
-                        .permitAll()
-                        .requestMatchers(
-                                "/oauth2/**",
-                                "/login/oauth2/**")
-                        .permitAll()
+                                "/register/complete"
+                        ).permitAll()
+                        .requestMatchers("/api-docs/**", "/scalar/**").permitAll()
+                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
 
-                        .anyRequest().authenticated())
+                        // ── 2. Utenti autenticati (USER = CREATOR) ───────────
+                        // Auth
+                        .requestMatchers("/auth/me", "/auth/logout").hasAnyRole(AppRoles.AUTHENTICATED_USERS)
+                        // Profilo utente
+                        .requestMatchers("/users/me/**").hasAnyRole(AppRoles.AUTHENTICATED_USERS)
+                        // Università — lettura
+                        .requestMatchers(HttpMethod.GET, "/universities/**").hasAnyRole(AppRoles.AUTHENTICATED_USERS)
+                        // Spotted — lettura e scrittura
+                        .requestMatchers(HttpMethod.GET, "/spotted/**").hasAnyRole(AppRoles.AUTHENTICATED_USERS)
+                        .requestMatchers(HttpMethod.POST, "/spotted").hasAnyRole(AppRoles.AUTHENTICATED_USERS)
+                        .requestMatchers(HttpMethod.PUT, "/spotted/**").hasAnyRole(AppRoles.AUTHENTICATED_USERS)
+                        .requestMatchers(HttpMethod.DELETE, "/spotted/**").hasAnyRole(AppRoles.AUTHENTICATED_USERS)
+                        // File
+                        .requestMatchers(HttpMethod.GET, "/files/**").permitAll()
+                        // Eventi — lettura aperta a tutti gli utenti
+                        .requestMatchers(HttpMethod.GET, "/events/**").hasAnyRole(AppRoles.AUTHENTICATED_USERS)
 
-                // OAuth2 Login (Google)
+                        // ── 3. CAMPUSLY_CREATOR (creazione eventi) ────────────
+                        .requestMatchers(HttpMethod.POST, "/events").hasAnyRole(AppRoles.EVENT_CREATORS)
+                        .requestMatchers(HttpMethod.PUT, "/events/**").hasAnyRole(AppRoles.EVENT_CREATORS)
+                        .requestMatchers(HttpMethod.DELETE, "/events/**").hasAnyRole(AppRoles.EVENT_CREATORS)
+
+                        // ── 4. CAMPUSLY_MODERATOR ─────────────────────────────
+                        .requestMatchers("/moderation/**").hasAnyRole(AppRoles.MODERATORS)
+
+                        // ── 5. SUPER_ADMIN ────────────────────────────────────
+                        .requestMatchers("/admin/**").hasAnyRole(AppRoles.ADMIN_ONLY)
+
+                        .anyRequest().authenticated()
+                )
+
                 .oauth2Login(oauth2 -> oauth2
                         .successHandler(oAuth2SuccessHandler))
 
-                // Filtro JWT prima del filtro standard di autenticazione
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

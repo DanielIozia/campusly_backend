@@ -11,5 +11,16 @@
     <include file="db/changelog/migrations/003-rename-columns-english-and-update-roles.sql"/>
     <include file="db/changelog/migrations/004-registration-flow-refactor.sql"/>
     <include file="db/changelog/migrations/005-status-length-50.sql"/>
+    <include file="db/changelog/migrations/006-users-audit-and-indexes.sql"/>
+    <include file="db/changelog/migrations/007-universities-enrich.sql"/>
+    <include file="db/changelog/migrations/008-spotted-audit-and-cascade.sql"/>
+    <include file="db/changelog/migrations/009-create-otp-tokens.sql"/>
+    <include file="db/changelog/migrations/010-create-comments.sql"/>
+    <include file="db/changelog/migrations/011-create-likes.sql"/>
+    <include file="db/changelog/migrations/012-create-follows.sql"/>
+    <include file="db/changelog/migrations/013-create-notifications.sql"/>
+    <include file="db/changelog/migrations/014-create-events.sql"/>
+    <include file="db/changelog/migrations/015-create-spotted-images.sql"/>
+    <include file="db/changelog/migrations/016-seed-universities.sql"/>
 
 </databaseChangeLog>

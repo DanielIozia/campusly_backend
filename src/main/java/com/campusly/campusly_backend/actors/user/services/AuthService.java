@@ -1,5 +1,8 @@
 package com.campusly.campusly_backend.actors.user.services;
 
+import com.campusly.campusly_backend.database.entity.OtpToken;
+import com.campusly.campusly_backend.database.entity.OtpTokenType;
+import com.campusly.campusly_backend.database.repository.OtpTokenRepository;
 import com.campusly.campusly_backend.shared.exception.ExceptionBackend;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -37,10 +40,10 @@ import java.security.SecureRandom;
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final OtpTokenRepository otpTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final TokenBlacklistService tokenBlacklistService;
-
     private final EmailService emailService;
 
     private static final int PASSWORD_MIN_LENGTH = 8;
@@ -67,7 +70,6 @@ public class AuthService {
                     null, HttpStatus.UNAUTHORIZED);
         }
 
-        // Utente non ha completato la registrazione
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw ExceptionBackend.fromError(
                     errorTitle,
@@ -119,10 +121,10 @@ public class AuthService {
         log.info("Logout eseguito, token invalidato");
     }
 
-
     // ---------------------------------------------------------------
     // forgot password → invio OTP via email
     // ---------------------------------------------------------------
+
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
         String email = normalizeEmail(request.getEmail());
@@ -136,32 +138,22 @@ public class AuthService {
                     null, HttpStatus.UNAUTHORIZED);
         }
 
-        // Se già in recovery, reinvia OTP
-        if (user.getStatus() == UserStatus.OTP_PASSWORD_RECOVERY) {
-            // rigenera OTP e aggiorna scadenza
-            String otp = generateOtp();
-            user.setOtpCode(otp);
-            user.setOtpExpiresAt(LocalDateTime.now().plusMinutes(OTP_EXPIRY_MINUTES));
-            userRepository.save(user);
-            sendOtpEmail(email, otp);
-            return;
-        }
-
-        // Solo utenti attivi possono richiedere recovery
-        if (user.getStatus() != UserStatus.ACTIVE) {
+        // Solo utenti attivi o già in recovery possono richiedere recovery
+        if (user.getStatus() != UserStatus.ACTIVE && user.getStatus() != UserStatus.OTP_PASSWORD_RECOVERY) {
             throw ExceptionBackend.fromError(
                     errorTitle,
                     "Non è possibile recuperare la password in questo stato. CODICE: AU210",
                     null, HttpStatus.BAD_REQUEST);
         }
 
-        // imposta stato recovery, genera OTP
-        String otp = generateOtp();
+        // Invalida token precedenti e crea nuovo OTP
+        otpTokenRepository.deleteByUserIdAndTokenType(user.getId(), OtpTokenType.PASSWORD_RESET);
+        OtpToken token = buildOtpToken(user.getId(), OtpTokenType.PASSWORD_RESET);
+        otpTokenRepository.save(token);
+
         user.setStatus(UserStatus.OTP_PASSWORD_RECOVERY);
-        user.setOtpCode(otp);
-        user.setOtpExpiresAt(LocalDateTime.now().plusMinutes(OTP_EXPIRY_MINUTES));
         userRepository.save(user);
-        sendOtpEmail(email, otp);
+        sendOtpEmail(email, token.getOtpCode());
     }
 
     @Transactional
@@ -176,22 +168,31 @@ public class AuthService {
                     "Nessun codice OTP in attesa di verifica per questa email. CODICE: AU213",
                     null, HttpStatus.BAD_REQUEST);
         }
-        if (user.getOtpExpiresAt() == null || LocalDateTime.now().isAfter(user.getOtpExpiresAt())) {
+
+        OtpToken token = otpTokenRepository
+                .findFirstByUserIdAndTokenTypeAndUsedFalseOrderByCreatedAtDesc(
+                        user.getId(), OtpTokenType.PASSWORD_RESET)
+                .orElseThrow(() -> ExceptionBackend.fromError(
+                        errorTitle,
+                        "Nessun codice OTP attivo. Richiedi un nuovo codice. CODICE: AU214",
+                        null, HttpStatus.GONE));
+
+        if (LocalDateTime.now().isAfter(token.getExpiresAt())) {
             throw ExceptionBackend.fromError(
                     errorTitle,
                     "Il codice OTP è scaduto. Richiedi un nuovo codice. CODICE: AU214",
                     null, HttpStatus.GONE);
         }
-        if (!user.getOtpCode().equals(request.getOtpCode().trim())) {
+
+        if (!token.getOtpCode().equals(request.getOtpCode().trim())) {
             throw ExceptionBackend.fromError(
                     errorTitle,
                     "Codice OTP non valido. CODICE: AU215",
                     null, HttpStatus.BAD_REQUEST);
         }
 
-        user.setOtpCode(null);
-        user.setOtpExpiresAt(null);
-        userRepository.save(user);
+        token.setUsed(true);
+        otpTokenRepository.save(token);
     }
 
     @Transactional
@@ -206,31 +207,41 @@ public class AuthService {
                     "Non è possibile reimpostare la password in questo stato. CODICE: AU220",
                     null, HttpStatus.BAD_REQUEST);
         }
-        // Per sicurezza, richiedi OTP anche qui
-        if (user.getOtpCode() != null || user.getOtpExpiresAt() != null) {
+
+        // Verifica che l'OTP sia già stato validato (nessun token attivo rimasto)
+        if (otpTokenRepository.existsByUserIdAndTokenTypeAndUsedFalse(user.getId(), OtpTokenType.PASSWORD_RESET)) {
             throw ExceptionBackend.fromError(
                     errorTitle,
                     "Devi prima verificare il codice OTP. CODICE: AU221",
                     null, HttpStatus.BAD_REQUEST);
         }
-        // Valida password (puoi aggiungere regole più stringenti)
+
         if (request.getNewPassword() == null || request.getNewPassword().length() < PASSWORD_MIN_LENGTH) {
             throw ExceptionBackend.fromError(
                     errorTitle,
                     "La password deve contenere almeno " + PASSWORD_MIN_LENGTH + " caratteri. CODICE: AU222",
                     null, HttpStatus.BAD_REQUEST);
         }
+
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         user.setStatus(UserStatus.ACTIVE);
         userRepository.save(user);
         return LoginResponse.fromUser(user);
     }
 
-    // ======================================== 
+    // ========================================
     //            Metodi privati
     // ========================================
 
-    // --- Utility OTP ---
+    private OtpToken buildOtpToken(java.util.UUID userId, OtpTokenType type) {
+        return OtpToken.builder()
+                .userId(userId)
+                .tokenType(type)
+                .otpCode(generateOtp())
+                .expiresAt(LocalDateTime.now().plusMinutes(OTP_EXPIRY_MINUTES))
+                .build();
+    }
+
     private String generateOtp() {
         return String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
     }
@@ -251,7 +262,6 @@ public class AuthService {
                 body);
     }
 
-    // Recupera l'utente per email o lancia un'eccezione NOT_FOUND uniforme.
     private User findUserOrThrow(String email, String errorTitle) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> ExceptionBackend.fromError(
@@ -260,12 +270,10 @@ public class AuthService {
                         null, HttpStatus.NOT_FOUND));
     }
 
-    // Normalizza l'email: trim e lowercase.
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase();
     }
 
-    // Genera JWT, lo salva in un cookie HttpOnly e lo invia nella response.
     private void addTokenCookie(User user, HttpServletResponse response) {
         String token = jwtService.generateToken(
                 user.getId(), user.getEmail(), user.getRole().name());
@@ -278,5 +286,4 @@ public class AuthService {
         cookie.setAttribute("SameSite", jwtService.getSameSiteAttribute());
         response.addCookie(cookie);
     }
-
 }

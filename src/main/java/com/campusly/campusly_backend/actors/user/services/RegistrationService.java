@@ -19,7 +19,10 @@ import com.campusly.campusly_backend.actors.user.interfaces.registration.Registr
 import com.campusly.campusly_backend.actors.user.interfaces.registration.enums.UserStatus;
 import com.campusly.campusly_backend.auth.entity.AuthProvider;
 import com.campusly.campusly_backend.auth.entity.Role;
+import com.campusly.campusly_backend.database.entity.OtpToken;
+import com.campusly.campusly_backend.database.entity.OtpTokenType;
 import com.campusly.campusly_backend.database.entity.User;
+import com.campusly.campusly_backend.database.repository.OtpTokenRepository;
 import com.campusly.campusly_backend.database.repository.UserRepository;
 import com.campusly.campusly_backend.shared.email.EmailService;
 import com.campusly.campusly_backend.shared.exception.ExceptionBackend;
@@ -37,12 +40,13 @@ import lombok.extern.slf4j.Slf4j;
 public class RegistrationService {
 
     private final UserRepository userRepository;
+    private final OtpTokenRepository otpTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final EmailService emailService;
 
     private static final int MIN_AGE = 16;
-    private static final int OTP_EXPIRY_MINUTES = 5; // scadenza otp in minuti
+    private static final int OTP_EXPIRY_MINUTES = 5;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     // ---------------------------------------------------------------
@@ -60,7 +64,6 @@ public class RegistrationService {
         if (existing.isPresent()) {
             User user = existing.get();
 
-            // Utente già attivo: account completato in precedenza
             if (user.getStatus() == UserStatus.ACTIVE) {
                 if (user.getAuthProvider() == AuthProvider.GOOGLE) {
                     throw ExceptionBackend.fromError(
@@ -74,7 +77,6 @@ public class RegistrationService {
                         null, HttpStatus.CONFLICT);
             }
 
-            // Utente già in attesa del codice: deve usare l'endpoint di reinvio
             if (user.getStatus() == UserStatus.CODE_VERIFICATION) {
                 throw ExceptionBackend.fromError(
                         errorTitle,
@@ -82,33 +84,30 @@ public class RegistrationService {
                         null, HttpStatus.CONFLICT);
             }
 
-            // Utente in stato SIGNUP (aveva verificato il codice ma non ha completato il
-            // profilo):
-            // generiamo un nuovo OTP e lo rimandiamo in CODE_VERIFICATION
+            // SIGNUP: utente aveva verificato ma non completato il profilo → riparti da OTP
             if (user.getStatus() == UserStatus.SIGNUP) {
-                String otp = generateOtp();
-                user.setOtpCode(otp);
-                user.setOtpExpiresAt(LocalDateTime.now().plusMinutes(OTP_EXPIRY_MINUTES));
+                otpTokenRepository.deleteByUserIdAndTokenType(user.getId(), OtpTokenType.EMAIL_VERIFICATION);
+                OtpToken token = buildOtpToken(user.getId(), OtpTokenType.EMAIL_VERIFICATION);
+                otpTokenRepository.save(token);
                 user.setStatus(UserStatus.CODE_VERIFICATION);
                 userRepository.save(user);
-                sendOtpEmail(email, otp);
+                sendOtpEmail(email, token.getOtpCode());
                 return;
             }
         }
 
-        // Nuova email: crea il record utente con solo l'email e invia OTP
-        String otp = generateOtp();
+        // Nuova email
         User newUser = User.builder()
                 .email(email)
                 .status(UserStatus.CODE_VERIFICATION)
-                .otpCode(otp)
-                .otpExpiresAt(LocalDateTime.now().plusMinutes(OTP_EXPIRY_MINUTES))
                 .authProvider(AuthProvider.LOCAL)
                 .role(Role.CAMPUSLY_USER)
                 .build();
-
         userRepository.save(newUser);
-        sendOtpEmail(email, otp);
+
+        OtpToken token = buildOtpToken(newUser.getId(), OtpTokenType.EMAIL_VERIFICATION);
+        otpTokenRepository.save(token);
+        sendOtpEmail(email, token.getOtpCode());
         log.info("Nuovo utente creato in CODE_VERIFICATION: {}", email);
     }
 
@@ -124,7 +123,6 @@ public class RegistrationService {
 
         User user = findUserOrThrow(email, errorTitle);
 
-        // L'utente deve essere in attesa del codice
         if (user.getStatus() != UserStatus.CODE_VERIFICATION) {
             throw ExceptionBackend.fromError(
                     errorTitle,
@@ -132,26 +130,32 @@ public class RegistrationService {
                     null, HttpStatus.BAD_REQUEST);
         }
 
-        // Controlla scadenza
-        if (user.getOtpExpiresAt() == null || LocalDateTime.now().isAfter(user.getOtpExpiresAt())) {
+        OtpToken token = otpTokenRepository
+                .findFirstByUserIdAndTokenTypeAndUsedFalseOrderByCreatedAtDesc(
+                        user.getId(), OtpTokenType.EMAIL_VERIFICATION)
+                .orElseThrow(() -> ExceptionBackend.fromError(
+                        errorTitle,
+                        "Nessun codice OTP attivo. Richiedi un nuovo codice. CODICE: AU114",
+                        null, HttpStatus.GONE));
+
+        if (LocalDateTime.now().isAfter(token.getExpiresAt())) {
             throw ExceptionBackend.fromError(
                     errorTitle,
                     "Il codice OTP è scaduto. Richiedi un nuovo codice. CODICE: AU114",
                     null, HttpStatus.GONE);
         }
 
-        // Controlla correttezza codice
-        if (!user.getOtpCode().equals(request.getOtpCode().trim())) {
+        if (!token.getOtpCode().equals(request.getOtpCode().trim())) {
             throw ExceptionBackend.fromError(
                     errorTitle,
                     "Codice OTP non valido. CODICE: AU115",
                     null, HttpStatus.BAD_REQUEST);
         }
 
-        // OTP corretto: avanza a SIGNUP e pulisce i campi OTP
+        token.setUsed(true);
+        otpTokenRepository.save(token);
+
         user.setStatus(UserStatus.SIGNUP);
-        user.setOtpCode(null);
-        user.setOtpExpiresAt(null);
         userRepository.save(user);
         log.info("OTP verificato con successo, utente avanzato a SIGNUP: {}", email);
     }
@@ -168,7 +172,6 @@ public class RegistrationService {
 
         User user = findUserOrThrow(email, errorTitle);
 
-        // Deve essere in stato SIGNUP
         if (user.getStatus() != UserStatus.SIGNUP) {
             throw ExceptionBackend.fromError(
                     errorTitle,
@@ -176,7 +179,6 @@ public class RegistrationService {
                     null, HttpStatus.BAD_REQUEST);
         }
 
-        // Username già in uso da un altro utente
         if (userRepository.existsByUsername(request.getUsername())) {
             throw ExceptionBackend.fromError(
                     errorTitle,
@@ -184,7 +186,6 @@ public class RegistrationService {
                     null, HttpStatus.CONFLICT);
         }
 
-        // Validazione età minima
         LocalDate birthDate = request.getBirthDate().toLocalDate();
         int eta = Period.between(birthDate, LocalDate.now()).getYears();
         if (eta < MIN_AGE) {
@@ -208,7 +209,7 @@ public class RegistrationService {
     }
 
     // ---------------------------------------------------------------
-    // Reinvio OTP — solo se l'utente è in CODE_VERIFICATION
+    // Reinvio OTP — solo se utente è in CODE_VERIFICATION
     // ---------------------------------------------------------------
 
     @Transactional
@@ -219,7 +220,6 @@ public class RegistrationService {
 
         User user = findUserOrThrow(email, errorTitle);
 
-        // Il reinvio è consentito solo in CODE_VERIFICATION
         if (user.getStatus() != UserStatus.CODE_VERIFICATION) {
             throw ExceptionBackend.fromError(
                     errorTitle,
@@ -227,17 +227,26 @@ public class RegistrationService {
                     null, HttpStatus.BAD_REQUEST);
         }
 
-        String otp = generateOtp();
-        user.setOtpCode(otp);
-        user.setOtpExpiresAt(LocalDateTime.now().plusMinutes(OTP_EXPIRY_MINUTES));
-        userRepository.save(user);
-        sendOtpEmail(email, otp);
+        otpTokenRepository.deleteByUserIdAndTokenType(user.getId(), OtpTokenType.EMAIL_VERIFICATION);
+        OtpToken token = buildOtpToken(user.getId(), OtpTokenType.EMAIL_VERIFICATION);
+        otpTokenRepository.save(token);
+        sendOtpEmail(email, token.getOtpCode());
         log.info("OTP reinviato a: {}", email);
     }
 
     // ──────────────────────────────────────────────────────
     // Utility
     // ──────────────────────────────────────────────────────
+
+    private OtpToken buildOtpToken(java.util.UUID userId, OtpTokenType type) {
+        return OtpToken.builder()
+                .userId(userId)
+                .tokenType(type)
+                .otpCode(generateOtp())
+                .expiresAt(LocalDateTime.now().plusMinutes(OTP_EXPIRY_MINUTES))
+                .build();
+    }
+
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase();
     }
@@ -285,7 +294,6 @@ public class RegistrationService {
         return String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
     }
 
-    // Recupera l'utente per email o lancia un'eccezione NOT_FOUND uniforme.
     private User findUserOrThrow(String email, String errorTitle) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> ExceptionBackend.fromError(

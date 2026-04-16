@@ -2,6 +2,11 @@ spring:
   application:
     name: campusly-backend
 
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 50MB
+
   jpa:
     hibernate:
       ddl-auto: validate
@@ -37,9 +42,17 @@ scalar:
 
 # Configurazione JWT applicativa
 app:
+  storage:
+    upload-dir: ${UPLOAD_DIR:uploads}
+    max-file-size: 5242880
+    allowed-types:
+      - image/jpeg
+      - image/png
+      - image/webp
+
   security:
     jwt:
       secret: ${JWT_SECRET}
-      access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION:900000}        # 15 minuti
+      access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION:9000000000}  # minuti
     oauth2:
       frontend-redirect-url: ${OAUTH2_FRONTEND_REDIRECT}

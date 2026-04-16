@@ -3,6 +3,7 @@ package com.campusly.campusly_backend.database.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import com.campusly.campusly_backend.actors.user.interfaces.registration.enums.UserStatus;
 import com.campusly.campusly_backend.auth.entity.AuthProvider;
@@ -91,15 +92,11 @@ public class User {
     @Column(name = "status", nullable = false, length = 20)
     private UserStatus status = UserStatus.ACTIVE;
 
-    /** Codice OTP a 6 cifre. Viene azzerato dopo la verifica. */
-    @Column(name = "otp_code", length = 10)
-    private String otpCode;
-
-    /** Timestamp di scadenza del codice OTP (10 minuti dalla generazione). */
-    @Column(name = "otp_expires_at")
-    private LocalDateTime otpExpiresAt;
-
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 }
