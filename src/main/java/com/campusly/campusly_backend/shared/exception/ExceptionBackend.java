@@ -6,13 +6,13 @@ import org.springframework.http.HttpStatus;
 @Getter
 public class ExceptionBackend extends RuntimeException {
 
-    private final ErrorDetail errorDetail;
+    private final ErrorDetail ErrorDetail;
     private final HttpStatus status;
     private final boolean warning;
 
-    private ExceptionBackend(ErrorDetail errorDetail, HttpStatus status, boolean warning) {
-        super(errorDetail.message());
-        this.errorDetail = errorDetail;
+    private ExceptionBackend(ErrorDetail ErrorDetail, HttpStatus status, boolean warning) {
+        super(ErrorDetail.getMessage());
+        this.ErrorDetail = ErrorDetail;
         this.status = status;
         this.warning = warning;
     }

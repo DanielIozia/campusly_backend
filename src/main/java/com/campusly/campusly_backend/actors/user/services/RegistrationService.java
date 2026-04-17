@@ -52,7 +52,6 @@ public class RegistrationService {
     // ---------------------------------------------------------------
     // Step 1 — sendOtp: inserisce email, invia OTP
     // ---------------------------------------------------------------
-
     @Transactional
     public void sendOtp(RegistrationInitRequest request) {
         request.isValid();
@@ -114,7 +113,6 @@ public class RegistrationService {
     // ---------------------------------------------------------------
     // Step 2 — Verifica OTP
     // ---------------------------------------------------------------
-
     @Transactional
     public void verifyOtp(RegistrationOtpRequest request) {
         request.isValid();
@@ -163,7 +161,6 @@ public class RegistrationService {
     // ---------------------------------------------------------------
     // Step 3 — Completamento profilo
     // ---------------------------------------------------------------
-
     @Transactional
     public LoginResponse completeRegistration(RegistrationCompleteRequest request, HttpServletResponse response) {
         request.isValid();
@@ -211,7 +208,6 @@ public class RegistrationService {
     // ---------------------------------------------------------------
     // Reinvio OTP — solo se utente è in CODE_VERIFICATION
     // ---------------------------------------------------------------
-
     @Transactional
     public void resendOtp(RegistrationResendOtpRequest request) {
         request.isValid();
@@ -238,6 +234,7 @@ public class RegistrationService {
     // Utility
     // ──────────────────────────────────────────────────────
 
+    // Costruisce un token OTP per l'utente e il tipo specificati, con codice generato e scadenza 10 minuti
     private OtpToken buildOtpToken(java.util.UUID userId, OtpTokenType type) {
         return OtpToken.builder()
                 .userId(userId)
@@ -247,10 +244,12 @@ public class RegistrationService {
                 .build();
     }
 
+    // Normalizza email rimuovendo spazi e convertendo in minuscolo
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase();
     }
 
+    // Invia email con codice OTP per completamento registrazione
     private void sendOtpEmail(String recipientEmail, String otpCode) {
         String title = "Il tuo codice di verifica";
         String body = """
@@ -277,6 +276,7 @@ public class RegistrationService {
                 body);
     }
 
+    // Aggiunge cookie con JWT al response dopo login o reset password
     private void addTokenCookie(User user, HttpServletResponse response) {
         String token = jwtService.generateToken(
                 user.getId(), user.getEmail(), user.getRole().name());
@@ -290,10 +290,12 @@ public class RegistrationService {
         response.addCookie(cookie);
     }
 
+    // Genera un codice OTP numerico di 6 cifre
     private String generateOtp() {
         return String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
     }
 
+    // Trova utente per email o lancia eccezione con messaggio e codice specifici
     private User findUserOrThrow(String email, String errorTitle) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> ExceptionBackend.fromError(

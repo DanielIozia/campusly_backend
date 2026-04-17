@@ -101,8 +101,7 @@ public class JwtService {
 
     // ==================== Private ====================
 
-    private String buildToken(UUID userId, String email, Map<String, Object> extraClaims,
-                              long expirationMs) {
+    private String buildToken(UUID userId, String email, Map<String, Object> extraClaims, long expirationMs) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(email)

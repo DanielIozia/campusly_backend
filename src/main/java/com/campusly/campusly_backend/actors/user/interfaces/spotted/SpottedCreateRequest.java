@@ -1,14 +1,19 @@
 package com.campusly.campusly_backend.actors.user.interfaces.spotted;
-
 import com.campusly.campusly_backend.shared.exception.ExceptionBackend;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.springframework.http.HttpStatus;
 
-public record SpottedCreateRequest(
-        String content,
-        String category,
-        Boolean isAnonymous
-) {
-    public void validate(String errorTitle) {
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class SpottedCreateRequest {
+    private String content;
+    private String category;
+    private Boolean isAnonymous;
+
+    public void isValid(String errorTitle) {
         if (content == null || content.isBlank()) {
             throw ExceptionBackend.fromError(errorTitle,
                     "Il contenuto non può essere vuoto. CODICE: SP001", null, HttpStatus.BAD_REQUEST);

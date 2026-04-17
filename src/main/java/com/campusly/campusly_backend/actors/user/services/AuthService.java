@@ -156,10 +156,15 @@ public class AuthService {
         sendOtpEmail(email, token.getOtpCode());
     }
 
+    // ---------------------------------------------------------------
+    // Verifica OTP recupero password
+    // ---------------------------------------------------------------
     @Transactional
-    public void verifyPasswordRecoveryOtp(VerifyOtpRequest request) {
-        String email = normalizeEmail(request.getEmail());
+    public void verifyPasswordRecoveryOtp(VerifyOtpRequest request) 
+    {
         String errorTitle = "Verifica OTP recupero password";
+        request.isValid(errorTitle);
+        String email = normalizeEmail(request.getEmail());
         User user = findUserOrThrow(email, errorTitle);
 
         if (user.getStatus() != UserStatus.OTP_PASSWORD_RECOVERY) {
@@ -195,6 +200,9 @@ public class AuthService {
         otpTokenRepository.save(token);
     }
 
+    // ---------------------------------------------------------------
+    // Reset password con OTP già verificato
+    // ---------------------------------------------------------------
     @Transactional
     public LoginResponse resetPassword(ResetPasswordRequest request) {
         String email = normalizeEmail(request.getEmail());
@@ -233,6 +241,7 @@ public class AuthService {
     //            Metodi privati
     // ========================================
 
+    // Costruisce un token OTP per l'utente e il tipo specificati, con codice generato e scadenza 10 min
     private OtpToken buildOtpToken(java.util.UUID userId, OtpTokenType type) {
         return OtpToken.builder()
                 .userId(userId)
@@ -242,10 +251,12 @@ public class AuthService {
                 .build();
     }
 
+    // Genera un codice OTP numerico di 6 cifre
     private String generateOtp() {
         return String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
     }
 
+    // Invia email con codice OTP per recupero password
     private void sendOtpEmail(String recipientEmail, String otpCode) {
         String title = "Codice recupero password";
         String body = """
@@ -262,6 +273,7 @@ public class AuthService {
                 body);
     }
 
+    // Trova utente per email o lancia eccezione con messaggio e codice specifici
     private User findUserOrThrow(String email, String errorTitle) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> ExceptionBackend.fromError(
@@ -270,10 +282,12 @@ public class AuthService {
                         null, HttpStatus.NOT_FOUND));
     }
 
+    // Normalizza email rimuovendo spazi e convertendo in minuscolo
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase();
     }
 
+    // Aggiunge cookie con JWT al response dopo login o reset password
     private void addTokenCookie(User user, HttpServletResponse response) {
         String token = jwtService.generateToken(
                 user.getId(), user.getEmail(), user.getRole().name());

@@ -21,10 +21,10 @@ public class UniversityService {
 
     private final UniversityRepository universityRepository;
 
-    // ---------------------------------------------------------------
-    // Pubblica — lista e dettaglio
-    // ---------------------------------------------------------------
 
+    // ---------------------------------------------------------------
+    // lista università
+    // ---------------------------------------------------------------
     @Transactional(readOnly = true)
     public List<UniversityResponse> getAll() {
         return universityRepository.findAll()
@@ -33,34 +33,38 @@ public class UniversityService {
                 .toList();
     }
 
+
+    // ---------------------------------------------------------------
+    // dettaglio università per ID
+    // ---------------------------------------------------------------
     @Transactional(readOnly = true)
     public UniversityResponse getById(UUID id) {
         return UniversityResponse.from(findOrThrow(id, "Recupero università"));
     }
 
-    // ---------------------------------------------------------------
-    // Admin — creazione
-    // ---------------------------------------------------------------
 
+    // ---------------------------------------------------------------
+    // ! UTENTE ADMIN — creazione nuova università
+    // ---------------------------------------------------------------
     @Transactional
     public UniversityResponse create(UniversityRequest request) {
         String errorTitle = "Creazione università";
-        request.validate(errorTitle);
+        request.isValid(errorTitle);
 
-        if (request.emailDomain() != null && universityRepository.existsByEmailDomain(request.emailDomain())) {
+        if (request.getEmailDomain() != null && universityRepository.existsByEmailDomain(request.getEmailDomain())) {
             throw ExceptionBackend.fromError(errorTitle,
                     "Email domain già associato a un'altra università. CODICE: UN010",
                     null, HttpStatus.CONFLICT);
         }
 
         University university = University.builder()
-                .name(request.name().trim())
-                .shortName(request.shortName() != null ? request.shortName().trim() : null)
-                .city(request.city().trim())
-                .country(request.country().trim())
-                .emailDomain(request.emailDomain() != null ? request.emailDomain().trim().toLowerCase() : null)
-                .websiteUrl(request.websiteUrl() != null ? request.websiteUrl().trim() : null)
-                .international(request.international() != null ? request.international() : false)
+                .name(request.getName().trim())
+                .shortName(request.getShortName() != null ? request.getShortName().trim() : null)
+                .city(request.getCity().trim())
+                .country(request.getCountry().trim())
+                .emailDomain(request.getEmailDomain() != null ? request.getEmailDomain().trim().toLowerCase() : null)
+                .websiteUrl(request.getWebsiteUrl() != null ? request.getWebsiteUrl().trim() : null)
+                .international(request.getInternational() != null ? request.getInternational() : false)
                 .build();
 
         university = universityRepository.save(university);
@@ -68,42 +72,42 @@ public class UniversityService {
         return UniversityResponse.from(university);
     }
 
-    // ---------------------------------------------------------------
-    // Admin — modifica
-    // ---------------------------------------------------------------
 
+    // ---------------------------------------------------------------
+    // ! UTENTE ADMIN — modifica università
+    // ---------------------------------------------------------------
     @Transactional
     public UniversityResponse update(UUID id, UniversityRequest request) {
         String errorTitle = "Modifica università";
-        request.validate(errorTitle);
+        request.isValid(errorTitle);
 
         University university = findOrThrow(id, errorTitle);
 
-        if (request.emailDomain() != null
-                && !request.emailDomain().equalsIgnoreCase(university.getEmailDomain())
-                && universityRepository.existsByEmailDomain(request.emailDomain())) {
+        if (request.getEmailDomain() != null
+                && !request.getEmailDomain().equalsIgnoreCase(university.getEmailDomain())
+                && universityRepository.existsByEmailDomain(request.getEmailDomain())) {
             throw ExceptionBackend.fromError(errorTitle,
                     "Email domain già associato a un'altra università. CODICE: UN010",
                     null, HttpStatus.CONFLICT);
         }
 
-        university.setName(request.name().trim());
-        university.setShortName(request.shortName() != null ? request.shortName().trim() : university.getShortName());
-        university.setCity(request.city().trim());
-        university.setCountry(request.country().trim());
-        university.setEmailDomain(request.emailDomain() != null ? request.emailDomain().trim().toLowerCase() : university.getEmailDomain());
-        university.setWebsiteUrl(request.websiteUrl() != null ? request.websiteUrl().trim() : university.getWebsiteUrl());
-        university.setInternational(request.international() != null ? request.international() : university.getInternational());
+        university.setName(request.getName().trim());
+        university.setShortName(request.getShortName() != null ? request.getShortName().trim() : university.getShortName());
+        university.setCity(request.getCity().trim());
+        university.setCountry(request.getCountry().trim());
+        university.setEmailDomain(request.getEmailDomain() != null ? request.getEmailDomain().trim().toLowerCase() : university.getEmailDomain());
+        university.setWebsiteUrl(request.getWebsiteUrl() != null ? request.getWebsiteUrl().trim() : university.getWebsiteUrl());
+        university.setInternational(request.getInternational() != null ? request.getInternational() : university.getInternational());
 
         university = universityRepository.save(university);
         log.info("Università aggiornata — id: {}", id);
         return UniversityResponse.from(university);
     }
 
-    // ---------------------------------------------------------------
-    // Admin — eliminazione
-    // ---------------------------------------------------------------
 
+    // ---------------------------------------------------------------
+    // ! UTENTE ADMIN — eliminazione università
+    // ---------------------------------------------------------------
     @Transactional
     public void delete(UUID id) {
         String errorTitle = "Eliminazione università";
@@ -112,10 +116,12 @@ public class UniversityService {
         log.info("Università eliminata — id: {}, nome: {}", id, university.getName());
     }
 
+    
     // ========================================
-    //            Metodi privati
+    // *            Metodi privati
     // ========================================
 
+    // Trova università per ID o lancia eccezione con messaggio e codice specifici
     private University findOrThrow(UUID id, String errorTitle) {
         return universityRepository.findById(id)
                 .orElseThrow(() -> ExceptionBackend.fromError(errorTitle,

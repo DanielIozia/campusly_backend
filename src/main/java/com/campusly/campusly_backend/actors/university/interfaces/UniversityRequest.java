@@ -1,18 +1,24 @@
 package com.campusly.campusly_backend.actors.university.interfaces;
 
 import com.campusly.campusly_backend.shared.exception.ExceptionBackend;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.springframework.http.HttpStatus;
 
-public record UniversityRequest(
-        String name,
-        String shortName,
-        String city,
-        String country,
-        String emailDomain,
-        String websiteUrl,
-        Boolean international
-) {
-    public void validate(String errorTitle) {
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class UniversityRequest {
+    private String name;
+    private String shortName;
+    private String city;
+    private String country;
+    private String emailDomain;
+    private String websiteUrl;
+    private Boolean international;
+
+    public void isValid(String errorTitle) {
         if (name == null || name.isBlank()) {
             throw ExceptionBackend.fromError(errorTitle,
                     "Il nome è obbligatorio. CODICE: UN001", null, HttpStatus.BAD_REQUEST);

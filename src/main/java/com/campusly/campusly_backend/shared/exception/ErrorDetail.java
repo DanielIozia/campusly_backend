@@ -1,7 +1,12 @@
 package com.campusly.campusly_backend.shared.exception;
 
-public record ErrorDetail(
-        String title,
-        String message,
-        Object payload
-) {}
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+@Data
+@AllArgsConstructor
+public class ErrorDetail {
+        private String title;
+        private String message;
+        private Object payload;
+}

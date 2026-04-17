@@ -1,7 +1,7 @@
 package com.campusly.campusly_backend.actors.user.services;
 
 import com.campusly.campusly_backend.actors.user.interfaces.spotted.SpottedCreateRequest;
-import com.campusly.campusly_backend.actors.user.interfaces.spotted.SpottedFilters;
+import com.campusly.campusly_backend.actors.user.interfaces.spotted.SpottedFiltersRequest;
 import com.campusly.campusly_backend.actors.user.interfaces.spotted.SpottedResponse;
 import com.campusly.campusly_backend.actors.user.interfaces.spotted.SpottedUpdateRequest;
 import com.campusly.campusly_backend.database.entity.Spotted;
@@ -36,13 +36,12 @@ public class SpottedService {
     private static final int MAX_IMAGES_PER_SPOTTED = 10;
 
     // ---------------------------------------------------------------
-    // Creazione
+    // Creazione spotted
     // ---------------------------------------------------------------
-
     @Transactional
     public SpottedResponse create(SpottedCreateRequest request, List<MultipartFile> images, UUID userId) {
         String errorTitle = "Creazione spotted";
-        request.validate(errorTitle);
+        request.isValid(errorTitle);
 
         User user = findUserOrThrow(userId, errorTitle);
 
@@ -54,9 +53,9 @@ public class SpottedService {
 
         Spotted spotted = Spotted.builder()
                 .authorId(userId)
-                .content(request.content().trim())
-                .category(request.category().trim())
-                .isAnonymous(request.isAnonymous() != null ? request.isAnonymous() : false)
+                .content(request.getContent().trim())
+                .category(request.getCategory().trim())
+                .isAnonymous(request.getIsAnonymous() != null ? request.getIsAnonymous() : false)
                 .universityId(user.getUniversityId())
                 .build();
 
@@ -69,9 +68,8 @@ public class SpottedService {
     }
 
     // ---------------------------------------------------------------
-    // Lettura singola
+    // Lettura singolo spotted
     // ---------------------------------------------------------------
-
     @Transactional(readOnly = true)
     public SpottedResponse getById(UUID id) {
         String errorTitle = "Recupero spotted";
@@ -80,19 +78,18 @@ public class SpottedService {
     }
 
     // ---------------------------------------------------------------
-    // Modifica
+    // Modifica spotted
     // ---------------------------------------------------------------
-
     @Transactional
     public SpottedResponse update(UUID id, SpottedUpdateRequest request, List<MultipartFile> newImages, UUID userId) {
         String errorTitle = "Modifica spotted";
-        request.validate(errorTitle);
+        request.isValid(errorTitle);
 
         Spotted spotted = findSpottedOrThrow(id, errorTitle);
         checkOwnership(spotted, userId, errorTitle);
 
-        spotted.setContent(request.content().trim());
-        spotted.setCategory(request.category().trim());
+        spotted.setContent(request.getContent().trim());
+        spotted.setCategory(request.getCategory().trim());
         spotted = spottedRepository.save(spotted);
 
         List<SpottedImage> existingImages = spotted.getImages();
@@ -117,7 +114,6 @@ public class SpottedService {
     // ---------------------------------------------------------------
     // Eliminazione spotted
     // ---------------------------------------------------------------
-
     @Transactional
     public void delete(UUID id, UUID userId) {
         String errorTitle = "Eliminazione spotted";
@@ -131,9 +127,8 @@ public class SpottedService {
     }
 
     // ---------------------------------------------------------------
-    // Eliminazione singola immagine
+    // Eliminazione singola immagine spotted
     // ---------------------------------------------------------------
-
     @Transactional
     public void deleteImage(UUID spottedId, UUID imageId, UUID userId) {
         String errorTitle = "Eliminazione immagine";
@@ -156,14 +151,16 @@ public class SpottedService {
     }
 
     // ---------------------------------------------------------------
-    // Lista completa con filtro (no paginazione)
+    // Lista completa spotted con filtro (no paginazione)
     // ---------------------------------------------------------------
-
     @Transactional(readOnly = true)
-    public List<SpottedResponse> listAll(SpottedFilters filters) {
+    public List<SpottedResponse> listAll(SpottedFiltersRequest filters) {
+        String errorTitle = "Elenco spotted";
+        filters.isValid(errorTitle);
+
         List<Spotted> spottedList;
-        if (filters != null && filters.universityId() != null) {
-            spottedList = spottedRepository.findByUniversityIdAndStatusOrderByCreatedAtDesc(filters.universityId(), "ACTIVE");
+        if (filters != null && filters.getUniversityId() != null) {
+            spottedList = spottedRepository.findByUniversityIdAndStatusOrderByCreatedAtDesc(filters.getUniversityId(), "ACTIVE");
         } else {
             spottedList = spottedRepository.findAll();
         }
@@ -175,6 +172,7 @@ public class SpottedService {
     //            Metodi privati
     // ========================================
 
+    // Salva immagini associate a uno spotted, restituendo le entità salvate
     private List<SpottedImage> persistImages(List<MultipartFile> files, UUID spottedId,
             UUID userId, int startOrder, String errorTitle) {
         if (files == null || files.isEmpty()) return List.of();
@@ -202,18 +200,21 @@ public class SpottedService {
         return result;
     }
 
+    // Trova spotted per ID o lancia eccezione con messaggio e codice specifici
     private Spotted findSpottedOrThrow(UUID id, String errorTitle) {
         return spottedRepository.findById(id)
                 .orElseThrow(() -> ExceptionBackend.fromError(errorTitle,
                         "Spotted non trovato. CODICE: SP100", null, HttpStatus.NOT_FOUND));
     }
 
+    // Trova utente per ID o lancia eccezione con messaggio e codice specifici
     private User findUserOrThrow(UUID userId, String errorTitle) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> ExceptionBackend.fromError(errorTitle,
                         "Utente non trovato. CODICE: SP101", null, HttpStatus.NOT_FOUND));
     }
 
+    // Controlla se l'utente è autore dello spotted, altrimenti lancia eccezione con messaggio e codice specifici
     private void checkOwnership(Spotted spotted, UUID userId, String errorTitle) {
         if (!userId.equals(spotted.getAuthorId())) {
             throw ExceptionBackend.fromError(errorTitle,

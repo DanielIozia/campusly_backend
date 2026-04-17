@@ -1,6 +1,7 @@
 package com.campusly.campusly_backend.actors.user.controllers;
 
 import com.campusly.campusly_backend.actors.user.interfaces.spotted.SpottedCreateRequest;
+import com.campusly.campusly_backend.actors.user.interfaces.spotted.SpottedFiltersRequest;
 import com.campusly.campusly_backend.actors.user.interfaces.spotted.SpottedUpdateRequest;
 import com.campusly.campusly_backend.actors.user.services.SpottedService;
 import com.campusly.campusly_backend.shared.exception.CustomResponse;
@@ -13,7 +14,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
 import java.util.List;
 import java.util.UUID;
 
@@ -67,7 +67,7 @@ public class SpottedController {
     @PostMapping("/list")
     public ResponseEntity<?> listAll(
             HttpServletRequest request,
-            @RequestBody(required = false) com.campusly.campusly_backend.actors.user.interfaces.spotted.SpottedFilters filters) {
+            @RequestBody(required = false) SpottedFiltersRequest filters) {
         CustomResponse customResponse = new CustomResponse(request.getMethod());
         try {
             customResponse.setData(spottedService.listAll(filters));

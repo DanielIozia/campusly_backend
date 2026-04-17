@@ -26,15 +26,14 @@ public class UserService {
     // ---------------------------------------------------------------
     // Associa / modifica università dell'utente autenticato
     // ---------------------------------------------------------------
-
     @Transactional
     public UserProfileResponse updateUniversity(UserUniversityRequest request, UUID userId) {
         String errorTitle = "Aggiornamento università";
-        request.validate(errorTitle);
+        request.isValid(errorTitle);
 
         User user = findUserOrThrow(userId, errorTitle);
 
-        University university = universityRepository.findById(request.universityId())
+        University university = universityRepository.findById(request.getUniversityId())
                 .orElseThrow(() -> ExceptionBackend.fromError(errorTitle,
                         "Università non trovata. CODICE: US010", null, HttpStatus.NOT_FOUND));
 
@@ -48,6 +47,7 @@ public class UserService {
     //            Metodi privati
     // ========================================
 
+    // Trova utente per ID o lancia eccezione con messaggio e codice specifici
     private User findUserOrThrow(UUID userId, String errorTitle) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> ExceptionBackend.fromError(errorTitle,

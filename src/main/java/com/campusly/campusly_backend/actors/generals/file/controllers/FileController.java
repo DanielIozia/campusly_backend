@@ -1,4 +1,4 @@
-package com.campusly.campusly_backend.actors.file.controllers;
+package com.campusly.campusly_backend.actors.generals.file.controllers;
 
 import com.campusly.campusly_backend.shared.exception.CustomResponse;
 import com.campusly.campusly_backend.shared.exception.ErrorDetail;
@@ -22,6 +22,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class FileController {
 
     private final FileStorageService fileStorageService;
+
+    // ---------------------------------------------------------------
+    // recupero file
+    // ---------------------------------------------------------------
 
     @GetMapping("/{userId}/{fileName:.+}")
     public ResponseEntity<?> serveFile(

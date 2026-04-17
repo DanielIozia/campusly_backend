@@ -62,8 +62,7 @@ public class RegistrationController {
         }
     }
 
-    // * Step 3: l'utente inserisce nome, cognome, username, password e data di
-    // nascita.
+    // * Step 3: l'utente inserisce nome, cognome, username, password e data di nascita.
     @PostMapping("/complete")
     public ResponseEntity<?> registerComplete(HttpServletRequest request,
             HttpServletResponse response,
